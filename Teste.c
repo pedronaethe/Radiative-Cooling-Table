@@ -33,7 +33,12 @@ double crit_freq(double ne, double Te); /*Calculates the critical frequency in s
 
 double rsync(double ne, double Te); /*Calculates the synchrotron radiation energy density*/
 double bremmscooling_rate (double ne, double Te);
-double totalcooling_rate(double ne, double Te);
+double totalthincooling_rate(double ne, double Te);
+double soptical_depth(double R, double ne);
+double absoptical_depth(double R, double ne, double Te);
+double total_optical_depth(double R, double ne, double Te);
+double total_cooling (double R, double ne, double Te);
+double comptonization_factor_artur(double ne, double Te);
 
 /*variables*/ 
 double Te; /*temperature of the electrons*/
@@ -305,31 +310,32 @@ double transcedentalxm (double x, double ne, double Te){
     return resposta;
 }
 double transcedentalxmderivative (double x, double ne, double Te){
-	double resposta = 0.629967 * pow(C_euler, 1.8899 * pow(x, 1./3.))/pow(x, 2./3.) - 2.49* pow(10., -10.) * 12. * C_pi * ne * scale_height(R, ne)/(Bmag(ne)) * 1/(pow(thetae(Te), 3.) * bessk2(1/thetae(Te))) * (- 1.6667 * (pow(x, 1./2.) + 0.485714 * pow(x, 1./4.) + 0.759429/pow(x, 8./3.)));
+	double resposta = 0.629967 * pow(C_euler, 1.8899 * pow(x, 1./3.))/pow(x, 2./3.) - 2.49* pow(10., -10.) * 12. * C_pi * ne * scale_height(R, ne)/(Bmag(ne)) * 1/(2*pow(thetae(Te), 5.)) * (- 1.6667 * (pow(x, 1./2.) + 0.485714 * pow(x, 1./4.) + 0.759429/pow(x, 8./3.)));
     return resposta;
 }
 double solve_eq_xm(double ne, double Te)
 {
     int itr;
-    double h, x1;
-    double x0 = 200.; /* initial value*/
-    double allerr = pow(10, -5.); /* allowed error*/
-    double maxmitr = pow(10, 5.); /* maximum iterations*/
+    long double h, x1;
+    double x0 = 5.; /* initial value*/
+    double allerr = pow(10, -3.); /* allowed error*/
+    double maxmitr = pow(10, 7.); /* maximum iterations*/
 
     for (itr=1; itr<=maxmitr; itr++)
     {
         h=transcedentalxm(x0, ne, Te)/transcedentalxmderivative(x0, ne, Te);
         x1=x0-h;
+        /*printf(" h = %Le\n", h);*/
         /*printf(" At Iteration no. %3d, x = %9.6f\n", itr, x1);*/
         if (fabs(h) < allerr)
         {
-            /*printf("After %3d iterations, root = %8.6f\n", itr, x1);*/
+            /*printf("After %3d iterations, root = %8.6Lf\n", itr, x1);*/
             return x1;
         }
         x0=x1;
     }
-    /*printf(" The required solution does not converge or iterations are insufficient\n")*/;
-    return 1;
+    /*printf(" The required solution does not converge or iterations are insufficient\n");*/
+    return x1;
 }
 
 
@@ -362,10 +368,28 @@ double comptonization_factor (double ne, double Te){
 	double maxfactor = 3 * BOLTZ_CGS * Te/(PLANCK_CGS * crit_freq(ne, Te));
 	double jm = log(maxfactor)/log(Afactor);
 	double s = thompson_opticaldepth + pow(thompson_opticaldepth, 2.);
+	/*printf("O valor de bsq é%le\n", bsq);
+	printf("O valor de thompson optical depth é%le\n", thompson_opticaldepth);
+	printf("O valor de Afactor é%le\n", Afactor);
+	printf("O valor de nuzero é%le\n", nuzero);
+	printf("O valor de maxfactor é%le\n", maxfactor);
+	printf("O valor de jm é%le\n", jm);
+	printf("O valor de s é%le\n", s);
+	printf("O valor de gammp(As) é%le\n", gammp(jm - 1, Afactor * s));
+	printf("O valor de gammp(s) é%le\n", gammp(jm +1, s));*/
+
 	double result = pow(C_euler, s*(Afactor -1))*(1 - gammp(jm - 1, Afactor * s)) + maxfactor * gammp(jm +1, s);
 	
 	return result;
 		
+}
+
+double comptonization_factor_artur(double ne, double Te) {
+	double prob = 1 - pow(C_euler, - soptical_depth(R, ne));
+	double A = 1 + 4 * thetae(Te) + 16 * pow(thetae(Te), 2.);
+	double result = 1 + prob*(A-1)/(1 - prob*A) * (1 - pow((PLANCK_CGS * crit_freq(ne, Te)/(3 * thetae(Te)* ERM_CGS * pow(C_CGS, 2.))), -1 - log(prob)/log(A)));
+	return result;
+	
 }
 
 double bremmscooling_rate (double ne, double Te){
@@ -373,27 +397,105 @@ double bremmscooling_rate (double ne, double Te){
 	return result;
 }
 
-double totalcooling_rate (double ne, double Te){
-	double result = bremmstrahlung_ee(ne, Te) + bremmstrahlung_ei(ne, Te) + rsync(ne, Te) * comptonization_factor(ne, Te);
+double totalthincooling_rate (double ne, double Te){
+	double result = bremmstrahlung_ee(ne, Te) + bremmstrahlung_ei(ne, Te) + rsync(ne, Te) * comptonization_factor_artur(ne, Te);
 	return result;
 }
 
+/*scattering optical depth*/
+
+double soptical_depth(double R, double ne){
+	double result = 2. * ne * THOMSON_CGS * scale_height(R, ne);
+	return result;
+}
+
+/*Absorption optical depth*/
+double absoptical_depth(double R, double ne, double Te){
+	double result = 1./(4. *C_sigma * pow(Te, 4.)) * scale_height (R, ne) *  totalthincooling_rate(ne, Te);
+	return result;
+}
+
+/*Total optical depth*/
+double total_optical_depth(double R, double ne, double Te){
+	double result = soptical_depth(R, ne) + absoptical_depth(R, ne, Te);
+	return result;
+}
+/*Total cooling with thin and thick disk*/
+double total_cooling (double R, double ne, double Te){
+	double result = 4. * C_sigma * pow(Te, 4.)/scale_height(R, ne) * 1/(3 * total_optical_depth(R, ne, Te)/2. * pow(3., 1./2.) + 1./absoptical_depth(R, ne, Te));
+	return result;
+}
+
+double Telist[70];
+double Rlist[70];
+double nelist[70];
+
 int main (double ne, double Te)
 {
+	int i;
+
+	for (i = 0; i < 71; i = i + 1){
+		float max = 12;
+		float min = 6;
+		float interval = 70;
+		double n = min + (max - min)/interval * i;
+		Telist[i] = pow(10., n);
+
+	}
+	
+	for (i = 0; i < 71; i = i+1) {
+		float max = log10(400*Rs);
+		float min = log10(1.3*Rs);
+		float interval = 70;
+		double n = min + (max - min)/interval * i;
+		Rlist[i] = pow(10., n);
+	}
+	
+
+	for (i = 0; i < 71; i = i+1) {
+		float max = 20.3;
+		float min = 12;
+		float interval = 70;
+		double n = min + (max - min)/interval * i;
+		nelist[i] = pow(10., n);
+	}
+	
+	/*for (i = 0; i < 71; i = i+1) {
+		printf("O valor de i é %d\n", i);
+		printf("O valor do bremmstrahlung cooling rate é:%lf\n", bremmscooling_rate(nelist[i], Telist[i]));
+		printf("o valor do thetae é:%lf\n", thetae(Telist[i]));
+		printf("o valor do rsync é: %lf\n", rsync(nelist[i], Telist[i]));
+		printf("o valor do comptonization factor é: %le\n", comptonization_factor_artur(nelist[i], Telist[i]));
+		printf("o valor do xm é: %lf\n", solve_eq_xm(nelist[i], Telist[i]));
+		printf("o valor da freq crit é: %lf\n", crit_freq(nelist[i], Telist[i]));
+		printf("o valor de Bmag é: %lf\n", Bmag(nelist[i]));
+		printf("o valor do cooling total no disco fino é:%lf\n", totalthincooling_rate(nelist[i], Telist[i]));
+		printf("O valor do tau_scat é:%lf\n", soptical_depth(Rlist[i], nelist[i]));
+		printf("O valor do tau_abs é:%lf\n", absoptical_depth(Rlist[i], nelist[i], Telist[i]));
+		printf("O valor do tau_total é:%lf\n", total_optical_depth(Rlist[i], nelist[i], Telist[i]));
+		printf("o valor do cooling total é:%lf\n", total_cooling(Rlist[i], nelist[i], Telist[i]));
+	
+	}*/
 	printf("valor de R\n");
 	scanf("%lf", &R);
 	printf("Valor de ne\n");
 	scanf("%lf", &ne);
 	printf ("valor de Te\n");
 	scanf("%lf", &Te);
+	/*printf("O valor de transcedental xm é %le\n", transcedentalxm(5, ne, Te));
+	printf("O valor de transcedental xm derivative é%le\n", transcedentalxmderivative(x, ne, Te));*/
 	printf("O valor do bremmstrahlung cooling rate é:%lf\n", bremmscooling_rate(ne, Te));
-	printf("o valor do cooling total é:%lf\n", totalcooling_rate(ne, Te));
 	printf("o valor do thetae é:%lf\n", thetae(Te));
 	printf("o valor do rsync é: %lf\n", rsync(ne, Te));
-	printf("o valor do comptonization factor é: %lf\n", comptonization_factor(ne, Te));
+	printf("o valor do comptonization factor é: %le\n", comptonization_factor_artur(ne, Te));
 	printf("o valor do xm é: %lf\n", solve_eq_xm(ne, Te));
 	printf("o valor da freq crit é: %lf\n", crit_freq(ne, Te));
 	printf("o valor de Bmag é: %lf\n", Bmag(ne));
+	printf("o valor do cooling total no disco fino é:%lf\n", totalthincooling_rate(ne, Te));
+	printf("O valor do tau_scat é:%lf\n", soptical_depth(R, ne));
+	printf("O valor do tau_abs é:%lf\n", absoptical_depth(R, ne, Te));
+	printf("O valor do tau_total é:%lf\n", total_optical_depth(R, ne, Te));
+	printf("o valor do cooling total é:%lf\n", total_cooling(R, ne, Te));
 	return 0;
 }
 		
