@@ -12,25 +12,16 @@ double bessk2(double xbess); /* Calculation of the second kind of bessel modifie
 void gcf(double *gammcf, double agam, double xgam, double *gln); /*Function used in the calculation of incomplete gamma function */
 void gser(double *gamser, double agam, double xgam, double *gln); /*Function used in the calculation of incomplete gamma function */
 double gammp(double a, double xgam); /* Calculation of lower incomplete gamma function*/
-
 double gammq(double a, double xgam); /* Calculation of upper incomplete gamma function*/
-
 double gammln(double xxgam); /* Calculation of the logarithm of the gamma function */
-
 double sound_speed(double ne);
-
 double thetae (double Te);
-
 double scale_height(double R, double ne);
-
 double bremmstrahlung_ee (double ne, double Te);
-
 double bremmstrahlung_ei (double ne, double Te);
-
-double solve_eq_xm(double ne, double Te); /*Solves the transcedental equation for xm in synchrotron radiation in cooling as described by Esin 1996, 1996ApJ...465..312E*/
-
+double f(double x, double R, double ne, double Te);
+double secant(double f(double x, double R, double ne, double Te)); /*Solves the transcedental equation for xm in synchrotron radiation in cooling as described by Esin 1996, 1996ApJ...465..312E*/
 double crit_freq(double ne, double Te); /*Calculates the critical frequency in synchrotron where below that frequency, radiation is self absorbed as described by Esin 1996, 1996ApJ...465..312E*/
-
 double rsync(double ne, double Te); /*Calculates the synchrotron radiation energy density*/
 double bremmscooling_rate (double ne, double Te);
 double totalthincooling_rate(double ne, double Te);
@@ -71,9 +62,8 @@ double R; /*radius*/
 #define rho_0 5e-7				/*Maximum density of initial condition*/
 #define r_0 100. * Rs 			/*Radius of maximum density (rho_0)*/
 #define r_min  75. * Rs 			/*Minimum raius of torus*/
-#define CONST_2 -C_GM/(r_min-Rs) + C_GM/(2.*pow(r_min, 2.))*(pow(r_0, 3.)/(pow((r_0-Rs), 2))
-#define kappa (C_gamma-1.)/C_gamma*pow(rho_0, 1.-C_gamma)*(CONST_2 + C_GM/(r_0-Rs) - C_GM/2. * r_0/(pow(r_0-Rs, 2.))))
-
+#define CONST_2 -C_GM/(r_min-Rs) + C_GM/(2.*pow(r_min, 2.))*(pow(r_0, 3.)/(pow((r_0-Rs), 2)))
+#define kappa (C_gamma-1.)/(C_gamma) *pow(rho_0, (1.-C_gamma)) * (CONST_2 + C_GM/(r_0-Rs) - C_GM/2. * r_0/(pow(r_0-Rs, 2.)))
 
 #define ITMAX 100 /* Used in calculating gamma function*/
 #define EPS 3.0e-7 /* Used in calculating gamma function*/
@@ -294,7 +284,7 @@ double bremmstrahlung_ee (double ne, double Te){
 double bremmstrahlung_ei (double ne, double Te){
 	double th_e = thetae(Te);
 	double result;
-	if (th_e < 1) {
+	if (th_e > 1) {
 		result = 1.48 * pow(10., -22.) * pow(ne, 2.) * (9*thetae(Te))/(2 * C_pi) * (log(1.123*thetae(Te) + 0.48) + 1.5);
 		
 	} else {
@@ -303,47 +293,87 @@ double bremmstrahlung_ei (double ne, double Te){
 	return result;
 }
 
-double transcedentalxm (double x, double ne, double Te){
-	/*double resposta = pow(C_euler, 1.8899 * pow(x, 1./3.)) - 2.49* pow(10., -10.) * 12. * C_pi * ne * scale_height(R, ne)/(Bmag(ne)) * 1/(pow(thetae(Te), 3.) * bessk2(1/thetae(Te))) * (1/pow(x, 7./6.) + 0.4/pow(x, 17./12.) + 0.5316/pow(x, 5./3.));*/
-	double resposta = pow(C_euler, 1.8899 * pow(x, 1./3.)) - 2.49* pow(10., -10.) * 12. * C_pi * ne * scale_height(R, ne)/(Bmag(ne)) * 1/(2*pow(thetae(Te), 5.)) * (1/pow(x, 7./6.) + 0.4/pow(x, 17./12.) + 0.5316/pow(x, 5./3.));
+double f(double x, double R, double ne, double Te){
+	printf("Scaleheight%lf\n", scale_height(R,ne));
+    		return pow(C_euler, 1.8899 * pow(x, 1./3.)) - 2.49* pow(10., -10.) * 12. * C_pi * ne * scale_height(R, ne)/(Bmag(ne)) * 1/(2*pow(thetae(Te), 5.)) * (1/pow(x, 7./6.) + 0.4/pow(x, 17./12.) + 0.5316/pow(x, 5./3.));
+
+}
+
+double secant(double f(double x, double R, double ne, double Te)){
+    int iter=1;
+    double eps = pow(10., -5.);
+    double x1 = 10000.;
+    double x2 = 20000.;
+    int maxSteps = pow(10, 6);
+    double x3;
+    do{
+        x3=(x1*f(x2, R, ne, Te)-x2*f(x1, R, ne, Te))/(f(x2, R, ne, Te)-f(x1, R, ne, Te));
+        x1=x2;
+        x2=x3;
+        iter++;
+	printf("x3 = %lf\n", x3);
+	//printf("x1 = %lf\n", x1);
+    }while(fabs(f(x3, R, ne, Te))>eps&&iter<=maxSteps);
+	if (isnan(x3)) {
+	x3 = x2;
+	return x3;
+ }	else{
+	return x3;
+}
+}
+
+/*double transcedentalxm (double x, double ne, double Te){
+	if (thetae(Te) < 0.03){
+		double resposta = pow(C_euler, 1.8899 * pow(x, 1./3.)) - 2.49* pow(10., -10.) * 12. * C_pi * ne * scale_height(R, ne)/(Bmag(ne)) * 1/(2*pow(thetae(Te), 5.)) * (1/pow(x, 7./6.) + 0.4/pow(x, 17./12.) + 0.5316/pow(x, 5./3.));
+}	else{
+		double resposta = pow(C_euler, 1.8899 * pow(x, 1./3.)) - 2.49* pow(10., -10.) * 12. * C_pi * ne * scale_height(R, ne)/(Bmag(ne)) * 1/(pow(thetae(Te), 3.) * bessk2(1/thetae(Te))) * (1/pow(x, 7./6.) + 0.4/pow(x, 17./12.) + 0.5316/pow(x, 5./3.));
+}
+
 	
     return resposta;
 }
 double transcedentalxmderivative (double x, double ne, double Te){
-	double resposta = 0.629967 * pow(C_euler, 1.8899 * pow(x, 1./3.))/pow(x, 2./3.) - 2.49* pow(10., -10.) * 12. * C_pi * ne * scale_height(R, ne)/(Bmag(ne)) * 1/(2*pow(thetae(Te), 5.)) * (- 1.6667 * (pow(x, 1./2.) + 0.485714 * pow(x, 1./4.) + 0.759429/pow(x, 8./3.)));
-    return resposta;
+	if (thetae(Te) < 0.03){
+		double resposta = 0.629967 * pow(C_euler, 1.8899 * pow(x, 1./3.))/pow(x, 2./3.) - 2.49* pow(10., -10.) * 12. * C_pi * ne * scale_height(R, ne)/(Bmag(ne)) * 1/(2*pow(thetae(Te), 5.)) * (- 1.6667 * (pow(x, 1./2.) + 0.485714 * pow(x, 1./4.) + 0.759429/pow(x, 8./3.)));
+	    return resposta;
+}	else{
+		double resposta = 0.629967 * pow(C_euler, 1.8899 * pow(x, 1./3.))/pow(x, 2./3.) - 2.49* pow(10., -10.) * 12. * C_pi * ne * scale_height(R, ne)/(Bmag(ne)) * 1/(pow(thetae(Te), 3.) * bessk2(1/thetae(Te))) * (- 1.6667 * (pow(x, 1./2.) + 0.485714 * pow(x, 1./4.) + 0.759429/pow(x, 8./3.)));
+	    return resposta;
+}
+
 }
 double solve_eq_xm(double ne, double Te)
 {
     int itr;
     long double h, x1;
-    double x0 = 5.; /* initial value*/
-    double allerr = pow(10, -3.); /* allowed error*/
-    double maxmitr = pow(10, 7.); /* maximum iterations*/
+    double x0 = 5.; // initial value
+    double allerr = pow(10, -3.); //allowed error
+    double maxmitr = pow(10, 6.); //maximum iterations
 
     for (itr=1; itr<=maxmitr; itr++)
     {
         h=transcedentalxm(x0, ne, Te)/transcedentalxmderivative(x0, ne, Te);
         x1=x0-h;
-        /*printf(" h = %Le\n", h);*/
-        /*printf(" At Iteration no. %3d, x = %9.6f\n", itr, x1);*/
+        //printf(" h = %Le\n", h);
+	//printf("x1 = %Le\n", x1);
+        //printf(" At Iteration no. %3d, x = %9.6f\n", itr, x1);
         if (fabs(h) < allerr)
         {
-            /*printf("After %3d iterations, root = %8.6Lf\n", itr, x1);*/
+            //printf("After %3d iterations, root = %8.6Lf\n", itr, x1);
             return x1;
         }
         x0=x1;
     }
-    /*printf(" The required solution does not converge or iterations are insufficient\n");*/
+    //printf(" The required solution does not converge or iterations are insufficient\n");
     return x1;
-}
+}*/
 
 
 double crit_freq (double ne, double Te){
 	double bsq = pow(Bmag(ne), 2.);
 	double result;
 	double nuzero = 2.80 * pow(10., 6.) * Bmag(ne);
-	result = 3/2 * nuzero * pow(thetae(Te), 2.) * solve_eq_xm(ne, Te);
+	result = 3/2 * nuzero * pow(thetae(Te), 2.) * secant(f);
 	return result;
 }
 
@@ -484,18 +514,23 @@ int main (double ne, double Te)
 	scanf("%lf", &Te);
 	/*printf("O valor de transcedental xm é %le\n", transcedentalxm(5, ne, Te));
 	printf("O valor de transcedental xm derivative é%le\n", transcedentalxmderivative(x, ne, Te));*/
-	printf("O valor do bremmstrahlung cooling rate é:%lf\n", bremmscooling_rate(ne, Te));
-	printf("o valor do thetae é:%lf\n", thetae(Te));
-	printf("o valor do rsync é: %lf\n", rsync(ne, Te));
+	printf("O valor do bremmstrahlung cooling rate é:%le\n", bremmscooling_rate(ne, Te));
+	printf("o valor do thetae é:%le\n", thetae(Te));
+	printf("o valor do rsync é: %le\n", rsync(ne, Te));
 	printf("o valor do comptonization factor é: %le\n", comptonization_factor_artur(ne, Te));
-	printf("o valor do xm é: %lf\n", solve_eq_xm(ne, Te));
-	printf("o valor da freq crit é: %lf\n", crit_freq(ne, Te));
-	printf("o valor de Bmag é: %lf\n", Bmag(ne));
+	printf("o valor do xm é: %le\n", secant(f));
+	printf("o valor da freq crit é: %le\n", crit_freq(ne, Te));
+	printf("o valor de Bmag é: %le\n", Bmag(ne));
 	printf("o valor do cooling total no disco fino é:%lf\n", totalthincooling_rate(ne, Te));
-	printf("O valor do tau_scat é:%lf\n", soptical_depth(R, ne));
-	printf("O valor do tau_abs é:%lf\n", absoptical_depth(R, ne, Te));
-	printf("O valor do tau_total é:%lf\n", total_optical_depth(R, ne, Te));
-	printf("o valor do cooling total é:%lf\n", total_cooling(R, ne, Te));
+	printf("O valor do tau_scat é:%le\n", soptical_depth(R, ne));
+	printf("O valor do tau_abs é:%le\n", absoptical_depth(R, ne, Te));
+	printf("O valor do tau_total é:%le\n", total_optical_depth(R, ne, Te));
+	printf("o valor do cooling total é:%le\n", total_cooling(R, ne, Te));
+	printf("O valor da função de bessel k2 é%le\n", bessk2(1/thetae(Te)));
+	printf("O valor de ne é%le\n", ne);
+	printf("O valor da função f%le\n", f(21581.9, R, ne, Te));
+	
+
 	return 0;
 }
 		
