@@ -496,13 +496,13 @@ int main() {
 //	printf("o valor do cooling total é:%le\n", total_cooling(R, ne, Te));
     //printf("\ndobro: %lf\n", dobro(f));
     FILE *file_radius;
-    file_radius = fopen("../radius.txt", "r");
+    file_radius = fopen("radius.txt", "r");
     FILE *file_e_density;
-    file_e_density = fopen("../e_density.txt", "r");
+    file_e_density = fopen("e_density.txt", "r");
     FILE *file_temperature;
-    file_temperature = fopen("../temperature.txt", "r");
+    file_temperature = fopen("temperature.txt", "r");
     FILE *file_result;
-    file_result = fopen("../cooling_table.csv", "w");
+    file_result = fopen("cooling_table.csv", "w");
 
     double cooling;
 
@@ -512,6 +512,7 @@ int main() {
     }
 
     fprintf(file_result, "radius, e_density, temperature, cooling\n");
+	
 
     while(fscanf(file_radius, "%lf,", &R) == 1) {
         rewind(file_e_density);
