@@ -294,10 +294,13 @@ double Bmag(double ne)
     return result;
 }
 
-double scale_height(double R, double ne)
+double scale_height(double R, double ne, double Te)
 {
-    double result = pow(R / C_GM, 1. / 2.) * sound_speed(ne) * (R - Rs);
-    return R;
+    //double result = pow(R / C_GM, 1. / 2.) * sound_speed(ne) * (R - Rs);
+	//double result = sound_speed(ne)/((C_G * C_Mbh/pow(R,3.)));
+	double result = Te/(4/C_euler);
+	//printf("Scale height =%le, R=%le\n", result, R);
+    return result;
 }
 
 double f(double x, double R, double ne, double Te)
@@ -397,7 +400,7 @@ double rsync(double ne, double Te)
     if (thetae(Te) > 0.03)
     {
         double result =
-            2 * C_pi * BOLTZ_CGS * Te * pow(crit_freq(ne, Te), 3.) / (3 * scale_height(R, ne) * pow(C_CGS, 2.)) +
+            2 * C_pi * BOLTZ_CGS * Te * pow(crit_freq(ne, Te), 3.) / (3 * scale_height(R, ne, Te) * pow(C_CGS, 2.)) +
             6.76 * pow(10., -28.) * ne / (bessk2(1 / thetae(Te)) * pow(a1, 1. / 6.)) *
                 (1 / pow(a4, 11. / 2.) * gammq(11. / 2., a4 * pow(crit_freq(ne, Te), 1. / 3.)) +
                  a2 / pow(a4, 19. / 4.) * gammq(19. / 4., a4 * pow(crit_freq(ne, Te), 1. / 3.)) + a3 / pow(a4, 4.) * (pow(a4, 3.) * crit_freq(ne, Te) + 3 * pow(a4, 2.) * pow(crit_freq(ne, Te), 2. / 3.) + 6 * a4 * pow(crit_freq(ne, Te), 1. / 3.) + 6) * pow(C_euler, -a4 * pow(crit_freq(ne, Te), 1. / 3.)));
@@ -406,7 +409,7 @@ double rsync(double ne, double Te)
     else
     {
         double result =
-            2 * C_pi * BOLTZ_CGS * Te * pow(crit_freq(ne, Te), 3.) / (3 * scale_height(R, ne) * pow(C_CGS, 2.)) +
+            2 * C_pi * BOLTZ_CGS * Te * pow(crit_freq(ne, Te), 3.) / (3 * scale_height(R, ne, Te) * pow(C_CGS, 2.)) +
             6.76 * pow(10., -28.) * ne / (2 * pow(thetae(Te), 2.) * pow(a1, 1. / 6.)) *
                 (1 / pow(a4, 11. / 2.) * gammq(11. / 2., a4 * pow(crit_freq(ne, Te), 1. / 3.)) +
                  a2 / pow(a4, 19. / 4.) * gammq(19. / 4., a4 * pow(crit_freq(ne, Te), 1. / 3.)) + a3 / pow(a4, 4.) * (pow(a4, 3.) * crit_freq(ne, Te) + 3 * pow(a4, 2.) * pow(crit_freq(ne, Te), 2. / 3.) + 6 * a4 * pow(crit_freq(ne, Te), 1. / 3.) + 6) * pow(C_euler, -a4 * pow(crit_freq(ne, Te), 1. / 3.)));
@@ -445,7 +448,7 @@ double rsync(double ne, double Te)
 
 double soptical_depth(double R, double ne)
 {
-    double result = 2. * ne * THOMSON_CGS * scale_height(R, ne);
+    double result = 2. * ne * THOMSON_CGS * scale_height(R, ne, Te);
     return result;
 }
 
@@ -467,7 +470,7 @@ double totalthincooling_rate(double ne, double Te)
 /*Absorption optical depth*/
 double absoptical_depth(double R, double ne, double Te)
 {
-    double result = 1. / (4. * C_sigma * pow(Te, 4.)) * scale_height(R, ne) * totalthincooling_rate(ne, Te);
+    double result = 1. / (4. * C_sigma * pow(Te, 4.)) * scale_height(R, ne, Te) * totalthincooling_rate(ne, Te);
     return result;
 }
 
@@ -481,7 +484,7 @@ double total_optical_depth(double R, double ne, double Te)
 /*Total cooling with thin and thick disk*/
 double total_cooling(double R, double ne, double Te)
 {
-    return 4. * C_sigma * pow(Te, 4.) / scale_height(R, ne) * 1 /
+    return 4. * C_sigma * pow(Te, 4.) / scale_height(R, ne, Te) * 1 /
            (3 * total_optical_depth(R, ne, Te) / 2. * pow(3., 1. / 2.) + 1. / absoptical_depth(R, ne, Te));
 }
 

@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+
 //Texture and cudaArray declaration.
 texture<float, 3, cudaReadModeElementType> coolTexObj;
 cudaArray *cuCoolArray = 0;
@@ -160,7 +161,6 @@ __global__ void cooling_function()
 
     // //For the normalized version only.
      lambda = tex3D<float>(coolTexObj, v3, v2, v1); 
-
     printf("Lambda = %lf\n", lambda);
     return;
 }
