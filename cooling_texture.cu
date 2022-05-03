@@ -25,9 +25,9 @@ void Load_Cooling_Tables(float *cooling_table)
     double cool;
 
     int i = 0;
-    int nx = 70; // Number of Te data.
-    int ny = 70; // Number of ne data.
-    int nz = 70; // Number of R data.
+    int nx = 100; // Number of Te data.
+    int ny = 100; // Number of ne data.
+    int nz = 100; // Number of R data.
 
     FILE *infile;
 
@@ -79,9 +79,9 @@ void Load_Cuda_Textures()
     float *cooling_table;
 
     // number of elements in each variable
-    const int nx = 70; //te
-    const int ny = 70; //ne
-    const int nz = 70; //r
+    const int nx = 100; //te
+    const int ny = 100; //ne
+    const int nz = 100; //r
 
 
     // allocate host arrays to be copied to textures
@@ -147,12 +147,12 @@ __global__ void cooling_function()
     //v3 = round((v3 - 6) * (nx - 1)/4);
     //printf("a = %f, b = %f, c = %f\n", v1, v2, v3);
 
-    // // For the normalized version only.
-    const int nx = 70; //Number of te used to generate table
-    const int ny = 70; //Number of ne used to generate table
-    const int nz = 70; //Number of r used to generate table
+    // For the normalized version only.
+    const int nx = 100; //Number of te used to generate table
+    const int ny = 100; //Number of ne used to generate table
+    const int nz = 100; //Number of r used to generate table
      v1 = (round((v1 - 6) * (nz - 1)/6) + 0.5)/nz;
-     v2 = (round((v2 - 12) * (ny - 1)/8) + 0.5 )/ny;
+     v2 = (round((v2 - 12) * (ny - 1)/13) + 0.5 )/ny;
      v3 = (round((v3 - 6)* (nx - 1)/4) + 0.5)/nx; 
     printf("a = %f, b = %f, c = %f\n", v1, v2, v3);
 

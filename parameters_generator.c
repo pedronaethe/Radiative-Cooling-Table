@@ -35,21 +35,21 @@ int main()
 	// 	fprintf(Feletronicdensity, "%le\n", ne);
 	// }
 
-	while (i <= 69)
+	while (i <= 99)
 	{
-		v1 = 6 + 6 * i/69;
+		v1 = 6 + 6 * i/99;
 		fprintf(Fradius, "%.2f\n", v1);
 		i = i + 1;
 	}
-	while (k <= 69)
+	while (k <= 99)
 	{
-		v2 = 12 + 8 * k/69;
+		v2 = 12 + 13 * k/99;
 		fprintf(Feletronicdensity, "%.2f\n", v2);
 		k = k + 1;
 	}
-	while (j <= 69)
+	while (j <= 99)
 	{
-		v3 = 6 + 4 * j/69;
+		v3 = 6 + 4 * j/99;
 		fprintf(Ftemperature, "%.2f\n", v3);
 		j = j + 1;
 	}
