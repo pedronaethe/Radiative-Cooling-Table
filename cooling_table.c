@@ -220,16 +220,6 @@ void gser(double *gamser, double agam, double xgam,
 
 double gammp(double agam, double xgam)
 {
-    int n;
-    if (agam < 0)
-    {
-        agam = -agam;
-        if (n < 1)
-        {
-            printf("Valor negativo para a na função gammp!!! a= %le\n", -agam);
-            n = 2;
-        }
-    }
     double gamser, gammcf, gln;
     if (xgam < (agam + 1.0))
     {
@@ -275,53 +265,50 @@ double gammln(double xxgam)
 }
 
 /***********************************************************************************************/
-double thetae(double Te)
+double thetae(double etemp)
 {
-    double result = (BOLTZ_CGS)*Te / ((ERM_CGS) * (pow(C_CGS, 2.)));
+    double result = (BOLTZ_CGS)*etemp / ((ERM_CGS) * (pow(C_CGS, 2.)));
     return result;
 }
 
-double sound_speed(double ne)
+double sound_speed(double edens)
 {
-    double result = pow((C_gamma) * (kappa)*pow(ne * 1.14 * C_amu, (C_gamma - 1.)), 1. / 2.);
+    double result = pow((C_gamma) * (kappa)*pow(edens * 1.14 * C_amu, (C_gamma - 1.)), 1. / 2.);
     return result;
 }
 
-double Bmag(double ne)
+double Bmag(double edens)
 {
-    // printf("ne = %le\n", ne);
-    double result = pow(8. * C_pi * pow(sound_speed(ne), 2.) * ne * 1.14 * C_amu / (beta + 1.), 1. / 2.);
+    // printf("edens = %le\n", edens);
+    double result = pow(8. * C_pi * pow(sound_speed(edens), 2.) * edens * 1.14 * C_amu / (beta + 1.), 1. / 2.);
     return result;
 }
 
-double scale_height(double R, double ne, double Te)
+double scale_height(double radius, double edens)
 {
-    //double result = pow(R / C_GM, 1. / 2.) * sound_speed(ne) * (R - Rs);
-	//double result = sound_speed(ne)/((C_G * C_Mbh/pow(R,3.)));
-	double result = Te/(4/C_euler);
-	//printf("Scale height =%le, R=%le\n", result, R);
-    return result;
+    double result = pow(radius / C_GM, 1. / 2.) * sound_speed(edens) * (radius - Rs);
+    return radius;
 }
 
-double f(double x, double R, double ne, double Te)
+double f(double x, double radius, double edens, double etemp)
 {
-    if (thetae(Te) < 0.03)
+    if (thetae(etemp) < 0.03)
     {
         return pow(C_euler, 1.8899 * pow(x, 1. / 3.)) -
-               2.49 * pow(10., -10.) * 12. * C_pi * ne * R / (Bmag(ne)) * 1 / (2 * pow(thetae(Te), 5.)) *
+               2.49 * pow(10., -10.) * 12. * C_pi * edens * radius / (Bmag(edens)) * 1 / (2 * pow(thetae(etemp), 5.)) *
                    (1 / pow(x, 7. / 6.) + 0.4 / pow(x, 17. / 12.) + 0.5316 / pow(x, 5. / 3.));
     }
     else
     {
-        return pow(C_euler, 1.8899 * pow(x, 1. / 3.)) - 2.49 * pow(10., -10.) * 12. * C_pi * ne * R / (Bmag(ne)) * 1 /
-                                                            (pow(thetae(Te), 3.) * bessk2(1 / thetae(Te))) *
+        return pow(C_euler, 1.8899 * pow(x, 1. / 3.)) - 2.49 * pow(10., -10.) * 12. * C_pi * edens * radius / (Bmag(edens)) * 1 /
+                                                            (pow(thetae(etemp), 3.) * bessk2(1 / thetae(etemp))) *
                                                             (1 / pow(x, 7. / 6.) + 0.4 / pow(x, 17. / 12.) +
                                                              0.5316 / pow(x, 5. / 3.));
     }
 }
 
 /*Function that returns the root from Secant Method*/
-double secant(double f(double x, double R, double ne, double Te))
+double secant(double radius, double edens, double etemp, double f(double x, double radius, double edens, double etemp))
 {
     int iter = 1;
     double x1 = 1.;
@@ -329,7 +316,7 @@ double secant(double f(double x, double R, double ne, double Te))
     double x3;
     do
     {
-        x3 = (x1 * f(x2, R, ne, Te) - x2 * f(x1, R, ne, Te)) / (f(x2, R, ne, Te) - f(x1, R, ne, Te));
+        x3 = (x1 * f(x2, radius, edens, etemp) - x2 * f(x1, radius, edens, etemp)) / (f(x2, radius, edens, etemp) - f(x1, radius, edens, etemp));
         if (isnan(x3) || isinf(x3))
         {
             x1 = x2;
@@ -340,176 +327,185 @@ double secant(double f(double x, double R, double ne, double Te))
         iter++;
         // printf("x3 = %lf\n", x3);
         // printf("x1 = %lf\n", x1);
-    } while (fabs(f(x3, R, ne, Te)) > eps && iter <= maxSteps);
+    } while (fabs(f(x3, radius, edens, etemp)) > eps && iter <= maxSteps);
     return x1;
 }
 
-double bremmstrahlung_ee(double ne, double Te)
+double bremmstrahlung_ee(double edens, double etemp)
 {
-    double th_e = thetae(Te);
+    double th_e = thetae(etemp);
     double result;
     if (th_e < 1)
     {
-        result = 2.56 * pow(10., -22.) * pow(ne, 2.) * pow(thetae(Te), 3. / 2.) *
-                 (1 + 1.10 * thetae(Te) + pow(thetae(Te), 2.) - 1.25 * pow(thetae(Te), 5. / 2.));
+        result = 2.56 * pow(10., -22.) * pow(edens, 2.) * pow(thetae(etemp), 3. / 2.) *
+                 (1 + 1.10 * thetae(etemp) + pow(thetae(etemp), 2.) - 1.25 * pow(thetae(etemp), 5. / 2.));
     }
     else
     {
-        result = 3.40 * pow(10., -22.) * pow(ne, 2.) * thetae(Te) * (log(1.123 * thetae(Te)) + 1.28);
+        result = 3.40 * pow(10., -22.) * pow(edens, 2.) * thetae(etemp) * (log(1.123 * thetae(etemp)) + 1.28);
     }
     return result;
 }
 
-double bremmstrahlung_ei(double ne, double Te)
+double bremmstrahlung_ei(double edens, double etemp)
 {
-    double th_e = thetae(Te);
+    double th_e = thetae(etemp);
     double result;
     if (th_e > 1)
     {
-        result = 1.48 * pow(10., -22.) * pow(ne, 2.) * (9 * thetae(Te)) / (2 * C_pi) *
-                 (log(1.123 * thetae(Te) + 0.48) + 1.5);
+        result = 1.48 * pow(10., -22.) * pow(edens, 2.) * (9 * thetae(etemp)) / (2 * C_pi) *
+                 (log(1.123 * thetae(etemp) + 0.48) + 1.5);
     }
     else
     {
-        result = 1.48 * pow(10., -22.) * pow(ne, 2.) * 4 * pow((2 * thetae(Te) / pow(C_pi, 3.)), 1. / 2.) *
-                 (1 + 1.781 * pow(thetae(Te), 1.34));
+        result = 1.48 * pow(10., -22.) * pow(edens, 2.) * 4 * pow((2 * thetae(etemp) / pow(C_pi, 3.)), 1. / 2.) *
+                 (1 + 1.781 * pow(thetae(etemp), 1.34));
     }
     return result;
 }
 
-double bremmscooling_rate(double ne, double Te)
+double bremmscooling_rate(double edens, double etemp)
 {
-    double result = bremmstrahlung_ee(ne, Te) + bremmstrahlung_ei(ne, Te);
+    double result = bremmstrahlung_ee(edens, etemp) + bremmstrahlung_ei(edens, etemp);
     return result;
 }
 
-double crit_freq(double ne, double Te)
+double crit_freq(double radius, double edens, double etemp)
 {
-    return (1.5) * (2.80e6 * Bmag(ne)) * pow(thetae(Te), 2.) * secant(f);
+    return (1.5) * (2.80e6 * Bmag(edens)) * pow(thetae(etemp), 2.) * secant(radius, edens, etemp, f);
 }
 
 /*Synchtron radiation calculation*/
-double rsync(double ne, double Te)
+double rsync(double radius, double edens, double etemp)
 {
-    double bsq = pow(Bmag(ne), 2.);
+    double bsq = pow(Bmag(edens), 2.);
     double nuzero = 2.80 * pow(10., 6.) * pow(bsq, 1. / 2.);
-    double a1 = 2 / (3 * nuzero * pow(thetae(Te), 2.));
+    double a1 = 2 / (3 * nuzero * pow(thetae(etemp), 2.));
     double a2 = 0.4 / pow(a1, 1. / 4.);
     double a3 = 0.5316 / pow(a1, 1. / 2.);
     double a4 = 1.8899 * pow(a1, 1. / 3.);
-    if (thetae(Te) > 0.03)
+    if (thetae(etemp) > 0.03)
     {
         double result =
-            2 * C_pi * BOLTZ_CGS * Te * pow(crit_freq(ne, Te), 3.) / (3 * scale_height(R, ne, Te) * pow(C_CGS, 2.)) +
-            6.76 * pow(10., -28.) * ne / (bessk2(1 / thetae(Te)) * pow(a1, 1. / 6.)) *
-                (1 / pow(a4, 11. / 2.) * gammq(11. / 2., a4 * pow(crit_freq(ne, Te), 1. / 3.)) +
-                 a2 / pow(a4, 19. / 4.) * gammq(19. / 4., a4 * pow(crit_freq(ne, Te), 1. / 3.)) + a3 / pow(a4, 4.) * (pow(a4, 3.) * crit_freq(ne, Te) + 3 * pow(a4, 2.) * pow(crit_freq(ne, Te), 2. / 3.) + 6 * a4 * pow(crit_freq(ne, Te), 1. / 3.) + 6) * pow(C_euler, -a4 * pow(crit_freq(ne, Te), 1. / 3.)));
+            2 * C_pi * BOLTZ_CGS * etemp * pow(crit_freq(radius, edens, etemp), 3.) / (3 * scale_height(radius, edens) * pow(C_CGS, 2.)) +
+            6.76 * pow(10., -28.) * edens / (bessk2(1 / thetae(etemp)) * pow(a1, 1. / 6.)) *
+                (1 / pow(a4, 11. / 2.) * gammq(11. / 2., a4 * pow(crit_freq(radius, edens, etemp), 1. / 3.)) +
+                 a2 / pow(a4, 19. / 4.) * gammq(19. / 4., a4 * pow(crit_freq(radius, edens, etemp), 1. / 3.)) + a3 / pow(a4, 4.) * (pow(a4, 3.) * crit_freq(radius, edens, etemp) + 3 * pow(a4, 2.) * pow(crit_freq(radius, edens, etemp), 2. / 3.) + 6 * a4 * pow(crit_freq(radius, edens, etemp), 1. / 3.) + 6) * pow(C_euler, -a4 * pow(crit_freq(radius, edens, etemp), 1. / 3.)));
         return result;
     }
     else
     {
         double result =
-            2 * C_pi * BOLTZ_CGS * Te * pow(crit_freq(ne, Te), 3.) / (3 * scale_height(R, ne, Te) * pow(C_CGS, 2.)) +
-            6.76 * pow(10., -28.) * ne / (2 * pow(thetae(Te), 2.) * pow(a1, 1. / 6.)) *
-                (1 / pow(a4, 11. / 2.) * gammq(11. / 2., a4 * pow(crit_freq(ne, Te), 1. / 3.)) +
-                 a2 / pow(a4, 19. / 4.) * gammq(19. / 4., a4 * pow(crit_freq(ne, Te), 1. / 3.)) + a3 / pow(a4, 4.) * (pow(a4, 3.) * crit_freq(ne, Te) + 3 * pow(a4, 2.) * pow(crit_freq(ne, Te), 2. / 3.) + 6 * a4 * pow(crit_freq(ne, Te), 1. / 3.) + 6) * pow(C_euler, -a4 * pow(crit_freq(ne, Te), 1. / 3.)));
+            2 * C_pi * BOLTZ_CGS * etemp * pow(crit_freq(radius, edens, etemp), 3.) / (3 * scale_height(radius, edens) * pow(C_CGS, 2.)) +
+            6.76 * pow(10., -28.) * edens / (2 * pow(thetae(etemp), 2.) * pow(a1, 1. / 6.)) *
+                (1 / pow(a4, 11. / 2.) * gammq(11. / 2., a4 * pow(crit_freq(radius, edens, etemp), 1. / 3.)) +
+                 a2 / pow(a4, 19. / 4.) * gammq(19. / 4., a4 * pow(crit_freq(radius, edens, etemp), 1. / 3.)) + a3 / pow(a4, 4.) * (pow(a4, 3.) * crit_freq(radius, edens, etemp) + 3 * pow(a4, 2.) * pow(crit_freq(radius, edens, etemp), 2. / 3.) + 6 * a4 * pow(crit_freq(radius, edens, etemp), 1. / 3.) + 6) * pow(C_euler, -a4 * pow(crit_freq(radius, edens, etemp), 1. / 3.)));
         return result;
     }
 }
 
-// double comptonization_factor (double ne, double Te){
-//	double bsq = pow(Bmag(ne), 2.);
-//	double thompson_opticaldepth = 2 * ne * THOMSON_CGS * Te;
-//	double Afactor = 1 + 4 * thetae(Te) + 16 * pow(thetae(Te), 2.);
-//	double maxfactor = 3 * BOLTZ_CGS * Te/(PLANCK_CGS * crit_freq(ne, Te));
-//	double jm = log(maxfactor)/log(Afactor);
-//	double s = thompson_opticaldepth + pow(thompson_opticaldepth, 2.);
-//	/*printf("O valor de bsq é%le\n", bsq);
-//	printf("O valor de thompson optical depth é%le\n", thompson_opticaldepth);
-//	printf("O valor de Afactor é%le\n", Afactor);
-//	printf("O valor de nuzero é%le\n", nuzero);
-//	printf("O valor de maxfactor é%le\n", maxfactor);
-//	printf("O valor de jm é%le\n", jm);
-//	printf("O valor de s é%le\n", s);
-//	printf("O valor de gammp(As) é%le\n", gammp(jm - 1, Afactor * s));
-//	printf("O valor de gammp(s) é%le\n", gammp(jm +1, s));*/
-//
-//	double result = pow(C_euler, s*(Afactor -1))*(1 - gammp(jm - 1, Afactor * s)) + maxfactor * gammp(jm +1, s);
-//	if (isnan(result)){
-//	result = maxfactor * gammp(jm +1, s);
-// }
-//	/*printf("O valor de resultado é%le\n", result);*/
-//
-//	return result;
-//
-// }
+double comptonization_factor (double radius, double edens, double etemp){
+	double bsq = pow(Bmag(edens), 2.);
+	double thompson_opticaldepth = 2 * edens * THOMSON_CGS * scale_height(radius, edens);
+	double Afactor = 1 + 4 * thetae(etemp) + 16 * pow(thetae(etemp), 2.);
+	double maxfactor = 3 * BOLTZ_CGS * etemp/(PLANCK_CGS * crit_freq(radius, edens, etemp));
+	double jm = log(maxfactor)/log(Afactor);
+	double s = thompson_opticaldepth + pow(thompson_opticaldepth, 2.);
+    // printf("Frequencia crítica = %le\n", crit_freq(radius, edens, etemp));
+	// printf("O valor de bsq é%le\n", bsq);
+	// printf("O valor de thompson optical depth é%le\n", thompson_opticaldepth);
+	// printf("O valor de Afactor é%le\n", Afactor);
+	// printf("O valor de maxfactor é%le\n", maxfactor);
+	// printf("O valor de jm é%le\n", jm);
+	// printf("O valor de s é%le\n", s);
+	// printf("O valor de gammp(As) é%le\n", gammp(jm + 1, Afactor * s));
+	// printf("O valor de gammp(s) é%le\n", gammp(jm +1, s));
+
+	double result = pow(C_euler, s*(Afactor -1))*(1 - gammp(jm + 1, Afactor * s)) + maxfactor * gammp(jm + 1, s);
+    //printf("O valor de resultado antes do isnan é%le\n", result);
+	if (isnan(result) && (1 - gammp(jm + 1, Afactor * s)) == 0 ){
+	    result = maxfactor * gammp(jm +1, s);
+    }
+
+    if (maxfactor < 1){
+        result = maxfactor;
+    }
+	//printf("O valor de resultado é%le\n", result);
+
+	return result;
+
+}
 
 /*scattering optical depth*/
 
-double soptical_depth(double R, double ne)
+double soptical_depth(double radius, double edens)
 {
-    double result = 2. * ne * THOMSON_CGS * scale_height(R, ne, Te);
+    double result = 2. * edens * THOMSON_CGS * scale_height(radius, edens);
     return result;
 }
 
-double comptonization_factor_artur(double ne, double Te)
+double comptonization_factor_artur(double radius, double edens, double etemp)
 {
-    double prob = 1 - pow(C_euler, -soptical_depth(R, ne));
-    double A = 1 + 4 * thetae(Te) + 16 * pow(thetae(Te), 2.);
-    double result = 1 + prob * (A - 1) / (1 - prob * A) * (1 - pow((PLANCK_CGS * crit_freq(ne, Te) / (3 * thetae(Te) * ERM_CGS * pow(C_CGS, 2.))), -1 - log(prob) / log(A)));
+    double prob = 1 - pow(C_euler, -soptical_depth(radius, edens));
+    double A = 1 + 4 * thetae(etemp) + 16 * pow(thetae(etemp), 2.);
+    double result = 1 + prob * (A - 1) / (1 - prob * A) * (1 - pow((PLANCK_CGS * crit_freq(radius, edens, etemp) / (3 * thetae(etemp) * ERM_CGS * pow(C_CGS, 2.))), -1 - log(prob) / log(A)));
     return result;
 }
 
-double totalthincooling_rate(double ne, double Te)
+double totalthincooling_rate(double radius, double edens, double etemp)
 {
     double result =
-        bremmstrahlung_ee(ne, Te) + bremmstrahlung_ei(ne, Te) + rsync(ne, Te) * comptonization_factor_artur(ne, Te);
+        bremmstrahlung_ee(edens, etemp) + bremmstrahlung_ei(edens, etemp) + rsync(radius, edens, etemp) * comptonization_factor(radius, edens, etemp);
     return result;
 }
 
 /*Absorption optical depth*/
-double absoptical_depth(double R, double ne, double Te)
+double absoptical_depth(double radius, double edens, double etemp)
 {
-    double result = 1. / (4. * C_sigma * pow(Te, 4.)) * scale_height(R, ne, Te) * totalthincooling_rate(ne, Te);
+    double result = 1. / (4. * C_sigma * pow(etemp, 4.)) * scale_height(radius, edens) * totalthincooling_rate(radius, edens, etemp);
     return result;
 }
 
 /*Total optical depth*/
-double total_optical_depth(double R, double ne, double Te)
+double total_optical_depth(double radius, double edens, double etemp)
 {
-    double result = soptical_depth(R, ne) + absoptical_depth(R, ne, Te);
+    double result = soptical_depth(radius, edens) + absoptical_depth(radius, edens, etemp);
     return result;
 }
 
 /*Total cooling with thin and thick disk*/
-double total_cooling(double R, double ne, double Te)
+double total_cooling(double radius, double edens, double etemp)
 {
-    return 4. * C_sigma * pow(Te, 4.) / scale_height(R, ne, Te) * 1 /
-           (3 * total_optical_depth(R, ne, Te) / 2. * pow(3., 1. / 2.) + 1. / absoptical_depth(R, ne, Te));
+    return 4. * C_sigma * pow(etemp, 4.) / scale_height(radius, edens) * 1 /
+           (3 * total_optical_depth(radius, edens, etemp) / 2. * pow(3., 1. / 2.) + 1. / absoptical_depth(radius, edens, etemp));
 }
 
 int main()
 {
-    //	printf("valor de R\n");
-    //	scanf("%le", &R);
-    //	printf("Valor de ne\n");
-    //	scanf("%le", &ne);
-    //	printf ("valor de Te\n");
-    //	scanf("%le", &Te);
+    // printf("valor de R\n");
+    // scanf("%le", &R);
+    // printf("Valor de ne\n");
+    // scanf("%le", &ne);
+    // printf ("valor de Te\n");
+    // scanf("%le", &Te);
+    // R = pow(10, R);
+    // ne = pow(10, ne);
+    // Te = pow(10, Te);
     //        printf("\nOne of the roots is: %lf\n",secant(f));
     //	printf("O valor do bremmstrahlung cooling rate é:%le\n", bremmscooling_rate(ne, Te));
     //	printf("o valor do thetae é:%le\n", thetae(Te));
     //	printf("O valor do sound_speed é:%lf\n", sound_speed(ne));
     //	printf("o valor de Bmag é: %le\n", Bmag(ne));
-    //	printf("o valor do cooling total no disco fino é:%le\n", totalthincooling_rate(ne, Te));
-    //	printf("o valor do rsync é: %le\n", rsync(ne, Te));
-    //	printf("o valor do comptonization factor é: %le\n", comptonization_factor(ne, Te));
-    //	printf("o valor do comptonization factor artur é: %le\n", comptonization_factor_artur(ne, Te));
-    //	printf("o valor da freq crit é: %le\n", crit_freq(ne, Te));
-    //	printf("O valor do tau_scat é:%le\n", soptical_depth(R, ne));
-    //	printf("O valor do tau_abs é:%le\n", absoptical_depth(R, ne, Te));
-    //	printf("O valor do tau_total é:%le\n", total_optical_depth(R, ne, Te));
-    //	printf("o valor do cooling total é:%le\n", total_cooling(R, ne, Te));
+    // printf("o valor do rsync é: %le\n", rsync(R, ne, Te));
+    // printf("o valor do comptonization factor é: %le\n", comptonization_factor(R, ne, Te));
+    // printf("o valor do comptonization factor artur é: %le\n", comptonization_factor_artur(R, ne, Te));
+    // printf("o valor da freq crit é: %le\n", crit_freq(R, ne, Te));
+    // printf("O valor do tau_scat é:%le\n", soptical_depth(R, ne));
+    // printf("O valor do tau_abs é:%le\n", absoptical_depth(R, ne, Te));
+    // printf("O valor do tau_total é:%le\n", total_optical_depth(R, ne, Te));
+    // printf("Cooling do disco fino é: %le\n", totalthincooling_rate(R, ne, Te));
+    // printf("o valor do cooling total é:%le\n", log10(total_cooling(R, ne, Te)));
+    //  printf("Valor de Gammp = %le\n", gammp(1,1));
     // printf("\ndobro: %lf\n", dobro(f));
     FILE *file_radius;
     file_radius = fopen("r.txt", "r");
@@ -521,7 +517,6 @@ int main()
     file_result = fopen("cooling_table_log.txt", "w");
 
     float cooling;
-    int a = 0, b = 0, c = 0;
 
     if (file_radius == NULL || file_e_density == NULL || file_temperature == NULL)
     {
@@ -553,13 +548,13 @@ int main()
     }
 
     // Run for values in the natural scale (not log scale)
-    // while(fscanf(file_radius, "%lf,", &R) == 1) {
+    // while(fscanf(file_radius, "%lf,", &radius) == 1) {
     //     rewind(file_e_density);
-    //     while(fscanf(file_e_density, "%lf,", &ne) == 1) {
+    //     while(fscanf(file_e_density, "%lf,", &edens) == 1) {
     //         rewind(file_temperature);
     //         while(fscanf(file_temperature, "%lf,", &Te) == 1) {
-    //             cooling = total_cooling(R, ne, Te);
-    //             fprintf(file_result,"%lf, %lf, %lf, %lf\n", R, ne, Te, cooling);
+    //             cooling = total_cooling(radius, edens, Te);
+    //             fprintf(file_result,"%lf, %lf, %lf, %lf\n", radius, edens, Te, cooling);
     //         }
     //     }
     // }
