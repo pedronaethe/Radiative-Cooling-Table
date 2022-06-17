@@ -8,7 +8,7 @@
 
 ######################################INSTRUCTIONS############################################
 
-1. Compile parameters_generator.c and run in order to generate three .txt files containing values for r, ne and te. Standard code provides you 70 values for each.
+1. Compile parameters_generator.c and run in order to generate three .txt files containing values for r, ne and te. Standard code provides you 100 values for each.
 
 2. Compile cooling_table.c and run in order to generate a .txt file containing a table (100x100x100) with parameters r, ne, te and cooling values.
 
