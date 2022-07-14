@@ -47,9 +47,9 @@ Below is a mini tutorial showing you how to find the cooling value in the textur
 
 ## Testing Texture Memory
 
-It is important to test whether texture memory is fetching the right values for different combination of the parameters. To do so you'll need to modify the ```cooling_function()``` variables v1, v2 and v3 in cooling_texture.cu, which represent $B$, $n_e$, $T_e$ parameters, respectively. If you didn't change tha maximum and minimun values of each parameter you don't need to change the mapping of texture coordinates, these are standard and independent of the current values.
+It is important to test whether texture memory is fetching the right values for different combination of the parameters. To do so you'll need to run cooling_texture_mag.cu as described above. When you run the code, you'll automatically be asked to give a $B_mag$, $n_e$ and $T_e$. Pick a value from the table and confirm that $lambda$ is equal the value you wanted.
 
-In case you did change the maximum and minimum values, refer to this formula for mapping the texture grid in normalized coordinates:
+If you didn't change tha maximum and minimum values of each parameter you don't need to change the mapping of texture coordinates, these are standard and independent of the current values. In case you did change the maximum and minimum values, refer to this formula for mapping the texture grid in normalized coordinates:
 
 $C_V = \frac{1}{N_V}\left(\frac{log_{10}\left(\frac{V}{V_{min}}\right) * (N_V - 1)}{log_{10}\left(\frac{V_{max}}{V_{min}}\right)} + 0.5\right).$
 
