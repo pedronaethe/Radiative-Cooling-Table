@@ -5,15 +5,45 @@ This code generates a radiative cooling table following the equations from [Esin
 
 ## Running the code and generating the cooling table
 
-1. Compile parameters_generator.c and run in order to generate three .txt files containing values for $B$, $n_e$ and $T_e$. Standard code provides you 100 values 
-for each.
+### 1. Compile parameters_generator_mag.c and run in order to generate three .txt files containing values for $B$, $n_e$ and $T_e$. Standard code provides you 100 values for each.
+
+To compile type in the terminal inside the folder:
+
+```$gcc parameters_generator_mag.c -o parameters -lm```
+
+To run:
+
+```$./parameters$```
+
+You'll see three ```.txt``` files inside the folder: mag.txt, ne.txt and te.txt. These are the parameters list.
 
 **Note: Please, becareful, if you wish to change the number of values for each parameters, for example, from 100 to 200, you need to change the other .c files as well because they were made for 100 values.**
 
-2. Compile cooling_table.c and run in order to generate a .txt file containing a table $(100 \times 100 \times 100)$ with parameters $B$, $n_e$ and $T_e$ and cooling values. The first line of the file indicates what each column represents.
+### 2. Compile cooling_table_magfield.c and run in order to generate a .txt file containing a table $(100 \times 100 \times 100)$ with parameters $B$, $n_e$ and $T_e$ and cooling values. The first line of the file indicates what each column represents.
 
-3. Compile cooling_texture.cu and run in order to test if the texture memory fetching is correct. This will help to introduce a faster 
-cooling in GPU based GRMHD simulations. 
+To compile cooling_table.c, type in the terminal:
+
+```$gcc cooling_table_magfield.c -o coolingtable -lm```
+
+To run, type:
+
+```$./coolingtable```
+
+This will generate a cooling_table_log_mag.txt, which is where the cooling table is located. 
+
+**Note: This may take a while, probably around ~40 min depending on your CPU**
+
+### 3. Compile cooling_texture_mag.cu and run in order to test if the texture memory fetching is correct. This will help to introduce a faster cooling in GPU based GRMHD simulations. 
+
+To compile:
+
+```$nvcc cooling_texture_mag.cu -o coolingtexture -lm```
+
+To run:
+
+```$./coolingtexture```
+
+Below is a mini tutorial showing you how to find the cooling value in the texture memory. One is advised to test whether the values are being correctly fetched.
 
 ## Testing Texture Memory
 
