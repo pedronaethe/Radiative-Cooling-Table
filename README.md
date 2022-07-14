@@ -21,7 +21,7 @@ It is important to test whether texture memory is fetching the right values for 
 
 In case you did change the maximum and minimum values, refer to this formula for mapping the texture grid in normalized coordinates:
 
-$   C_V = \frac{1}{N_V}\left(\frac{log_{10}\left(\frac{V}{V_{min}}\right) * (N_V - 1)}{log_{10}\left(\frac{V_{max}}{V_{min}}\right)} + 0.5\right).$
+$C_V = \frac{1}{N_V}\left(\frac{log_{10}\left(\frac{V}{V_{min}}\right) * (N_V - 1)}{log_{10}\left(\frac{V_{max}}{V_{min}}\right)} + 0.5\right).$
 
 where V refers to the coordinate you modified.
 
