@@ -297,10 +297,7 @@ double thetae(double etemp)
 
 double scale_height(double etemp)
 {
-    //double result = pow(R / C_GM, 1. / 2.) * sound_speed(ne) * (R - Rs);
-	//double result = sound_speed(ne)/((C_G * C_Mbh/pow(R,3.)));
 	double result = etemp/(4/C_euler);
-	//printf("Scale height =%le, R=%le\n", result, R);
     return result;
 }
 
@@ -356,7 +353,7 @@ double bremmstrahlung_ee(double edens, double etemp)
     }
     else
     {
-        result = 3.40 * pow(10., -22.) * pow(edens, 2.) * thetae(etemp) * (log(1.123 * thetae(etemp)) + 1.28);
+        result = 3.42 * pow(10., -22.) * pow(edens, 2.) * thetae(etemp) * (log(1.123 * thetae(etemp)) + 1.24);
     }
     return result;
 }
@@ -386,14 +383,13 @@ double bremmscooling_rate(double edens, double etemp)
 
 double crit_freq(double edens, double etemp, double mag_field)
 {
-    return (1.5) * (2.80e6 * mag_field) * pow(thetae(etemp), 2.) * secant(f);
+    return (1.5) * (2.80 * pow(10,6) * mag_field) * pow(thetae(etemp), 2.) * secant(f);
 }
 
 /*Synchtron radiation calculation*/
 double rsync(double edens, double etemp, double mag_field)
 {
-    double bsq = pow(mag_field, 2.);
-    double nuzero = 2.80 * pow(10., 6.) * pow(bsq, 1. / 2.);
+    double nuzero = 2.80 * pow(10., 6.) * mag_field;
     double a1 = 2 / (3 * nuzero * pow(thetae(etemp), 2.));
     double a2 = 0.4 / pow(a1, 1. / 4.);
     double a3 = 0.5316 / pow(a1, 1. / 2.);
@@ -419,7 +415,6 @@ double rsync(double edens, double etemp, double mag_field)
 }
 
 // double comptonization_factor (double edens, double etemp){
-//	double bsq = pow(Bmag(edens), 2.);
 //	double thompson_opticaldepth = 2 * edens * THOMSON_CGS * etemp;
 //	double Afactor = 1 + 4 * thetae(etemp) + 16 * pow(thetae(etemp), 2.);
 //	double maxfactor = 3 * BOLTZ_CGS * etemp/(PLANCK_CGS * crit_freq(edens, etemp, mag_field));
@@ -478,7 +473,7 @@ double absoptical_depth(double edens, double etemp, double mag_field)
 /*Total optical depth*/
 double total_optical_depth(double edens, double etemp, double mag_field)
 {
-    double result = soptical_depth(edens, mag_field) + absoptical_depth(edens, etemp, mag_field);
+    double result = soptical_depth(edens, etemp) + absoptical_depth(edens, etemp, mag_field);
     return result;
 }
 
@@ -486,7 +481,7 @@ double total_optical_depth(double edens, double etemp, double mag_field)
 double total_cooling(double edens, double etemp, double mag_field)
 {
     return 4. * C_sigma * pow(etemp, 4.) / scale_height(etemp) * 1 /
-           (3 * total_optical_depth(edens, etemp, mag_field) / 2. * pow(3., 1. / 2.) + 1. / absoptical_depth(edens, etemp, mag_field));
+           (3 * total_optical_depth(edens, etemp, mag_field) / 2. + pow(3., 1. / 2.) + 1. / absoptical_depth(edens, etemp, mag_field));
 }
 
 int main()

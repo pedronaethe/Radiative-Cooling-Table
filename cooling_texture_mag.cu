@@ -38,7 +38,7 @@ void Load_Cooling_Tables(float *cooling_table)
     bmag_arr = (double *)malloc(nx * ny * nz * sizeof(double));
 
     // Reading the cooling table
-    infile = fopen("cooling_table_log.txt", "r"); // this command is to ignore the first line.
+    infile = fopen("cooling_table_log_mag.txt", "r"); // this command is to ignore the first line.
 
     if (infile == NULL)
     {
@@ -66,7 +66,8 @@ void Load_Cooling_Tables(float *cooling_table)
 
     // Free arrays used to read in table data
     free(ne_arr);
-    free(te_arr);    free(bmag_arr);
+    free(te_arr);    
+    free(bmag_arr);
     free(cool_arr);
 }
 
@@ -126,14 +127,14 @@ void Free_Cuda_Textures()
 }
 
 //Function used to interpolate the values of the cooling table.
-__global__ void cooling_function()
+__global__ void cooling_function(float a1, float a2, float a3)
 {
     float v1, v2, v3, lambda;
 
     //Values for testing;
-    v1 = 9.22; //Bmag parameter
-    v2 = 12.58; //ne parameter
-    v3 = 7.57; //te parameter
+    v1 = a1; //Bmag parameter
+    v2 = a2; //ne parameter
+    v3 = a3; //te parameter
     printf("a = %f, b = %f, c = %f\n", v1, v2, v3);
 
     /*For the non normalized version only.
@@ -151,8 +152,8 @@ __global__ void cooling_function()
     const int ny = 100; //Number of ne used to generate table
     const int nz = 100; //Number of Bmag used to generate table
      v1 = (round((v1 - 0) * (nz - 1)/7) + 0.5)/nz;
-     v2 = (round((v2 - 12) * (ny - 1)/13) + 0.5 )/ny;
-     v3 = (round((v2 - 6) * (nx - 1)/4) + 0.5 )/nx;
+     v2 = (round((v2 - 12) * (ny - 1)/8) + 0.5 )/ny;
+     v3 = (round((v3 - 6) * (nx - 1)/4) + 0.5 )/nx;
 
 
     printf("a = %f, b = %f, c = %f\n", v1, v2, v3);
@@ -168,8 +169,15 @@ __global__ void cooling_function()
 
 int main()
 {
+    float read1, read2, read3;
+    printf("Bmag value:\n");
+    scanf("%f", &read1);
+    printf("ne value:\n");
+    scanf("%f", &read2);
+    printf("Te value:\n");
+    scanf("%f", &read3);
     Load_Cuda_Textures();
-    cooling_function<<<1, 1>>>();
+    cooling_function<<<1, 1>>>(read1, read2, read3);
 
     Free_Cuda_Textures();
 
