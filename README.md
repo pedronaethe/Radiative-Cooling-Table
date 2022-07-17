@@ -3,6 +3,8 @@ Author: Pedro Naethe Motta (pedronaethemotta@usp.br)
 
 This code generates a radiative cooling table following the equations from [Esin et al. 1996](https://ui.adsabs.harvard.edu/abs/1996ApJ...465..312E). The radiative cooling table depends on the parameters $B$, $T_e$, $n_e$ (magnetic field, electron temperature and electron number density) in CGS, using texture memory in CUDA.
 
+I'm leaving a cooling_table.txt in the repository for comparison.
+
 ## Running the code and generating the cooling table
 
 ### 1. Compile parameters_generator_mag.c and run in order to generate three .txt files containing values for $B$, $n_e$ and $T_e$. Standard code provides you 100 values for each.
