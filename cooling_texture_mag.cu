@@ -4,8 +4,9 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-
+#include <unistd.h>
+#define RESET "\x1B[0m"
+#define BOLD "\x1B[1m"      //Bold Text Formula...
 //Texture and cudaArray declaration.
 texture<float, 3, cudaReadModeElementType> coolTexObj;
 cudaArray *cuCoolArray = 0;
@@ -135,7 +136,8 @@ __global__ void cooling_function(float a1, float a2, float a3)
     v1 = a1; //Bmag parameter
     v2 = a2; //ne parameter
     v3 = a3; //te parameter
-    printf("a = %f, b = %f, c = %f\n", v1, v2, v3);
+    printf("Values you chose:\n");
+    printf("Bmag = %f, ne = %f, Te = %f\n", v1, v2, v3);
 
     /*For the non normalized version only.
      The remapping formula goes (variable - initial_value) * (N - 1)/(max_value - init_value)*/
@@ -155,30 +157,41 @@ __global__ void cooling_function(float a1, float a2, float a3)
      v2 = (round((v2 - 12) * (ny - 1)/8) + 0.5 )/ny;
      v3 = (round((v3 - 6) * (nx - 1)/4) + 0.5 )/nx;
 
-
-    printf("a = %f, b = %f, c = %f\n", v1, v2, v3);
+    printf("Coordinates in texture grid:\n");
+    printf("Bmag = %f, ne = %f, Te = %f\n", v1, v2, v3);
 
     //For the non normalized version only.
     //lambda = tex3D<float>(coolTexObj, v3 + 0.5f, v2 + 0.5f, v1 + 0.5f); 
 
     // //For the normalized version only.
     lambda = tex3D<float>(coolTexObj, v3, v2, v1); 
-    printf("Lambda = %lf\n", lambda);
+    printf("Cooling value = %lf\n", lambda, BOLD, RESET);
     return;
 }
 
 int main()
 {
     float read1, read2, read3;
-    printf("Bmag value:\n");
-    scanf("%f", &read1);
-    printf("ne value:\n");
-    scanf("%f", &read2);
-    printf("Te value:\n");
-    scanf("%f", &read3);
+    float loop = 100;
+    char str[1];
     Load_Cuda_Textures();
-    cooling_function<<<1, 1>>>(read1, read2, read3);
-
+    while (loop > 1)
+    {
+	    printf("Bmag value:\n");
+	    scanf("%f", &read1);
+	    printf("ne value:\n");
+	    scanf("%f", &read2);
+	    printf("Te value:\n");
+	    scanf("%f", &read3);
+	    cooling_function<<<1, 1>>>(read1, read2, read3);
+        sleep(1);
+	    printf("Do you want to read other values? y/n\n");
+	    scanf("%s", str);
+	    if (strcmp(str, "n") == 0)
+	    {
+	    	loop = 0;
+	    }
+	}
     Free_Cuda_Textures();
 
     return 0;
