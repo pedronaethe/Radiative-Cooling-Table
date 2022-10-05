@@ -153,9 +153,9 @@ __global__ void cooling_function(float a1, float a2, float a3)
     const int nx = 100; //Number of te used to generate table
     const int ny = 100; //Number of ne used to generate table
     const int nz = 100; //Number of Bmag used to generate table
-     v1 = (round((v1 - 0) * (nz - 1)/7) + 0.5)/nz;
-     v2 = (round((v2 - 12) * (ny - 1)/8) + 0.5 )/ny;
-     v3 = (round((v3 - 6) * (nx - 1)/4) + 0.5 )/nx;
+     v1 = (round((v1 - 0) * (nz - 1)/10) + 0.5)/nz;
+     v2 = (round((v2 - 12) * (ny - 1)/10) + 0.5 )/ny;
+     v3 = (round((v3 - 4) * (nx - 1)/11) + 0.5 )/nx;
 
     printf("Coordinates in texture grid:\n");
     printf("Bmag = %f, ne = %f, Te = %f\n", v1, v2, v3);
@@ -165,7 +165,7 @@ __global__ void cooling_function(float a1, float a2, float a3)
 
     // //For the normalized version only.
     lambda = tex3D<float>(coolTexObj, v3, v2, v1); 
-    printf("Cooling value = %lf\n", lambda, BOLD, RESET);
+    printf("Cooling value = %lf\n", lambda);
     return;
 }
 

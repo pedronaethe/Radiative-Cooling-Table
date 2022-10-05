@@ -4,39 +4,26 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define C_pi 3.14159265358979    /*value of pi*/
-#define C_euler 2.71828182845904 /* euler constant*/
-#define ERM_CGS 9.1093826e-28    /*Electron rest mass CGS*/
-#define C_sigma 5.67051e-5       /*Stephan Boltzmann constant*/
-#define BOLTZ_CGS 1.3806505e-16  /*Boltzmann constant*/
-#define eps 3e-7
-#define maxSteps 1e3
-#define BOLTZ_CGS 1.3806505e-16   /*Boltzmann constant*/
-#define PLANCK_CGS 6.62606876e-27 /*Planck constant*/
-#define ERM_CGS 9.1093826e-28     /*Electron rest mass CGS*/
-#define C_amu 1.66053886e-24      /*Atomic mass unit*/
-#define C_CGS 2.99792458e10       /*Speed of light*/
-#define C_G 6.6726e-8             /*Gravitational constant*/
-#define C_Msun 2.e33              /*Sun mass*/
-#define THOMSON_CGS 6.6524e-25    /*Thomson cross section*/
-#define Rs 2. * C_G *C_Mbh / (pow(C_CGS, 2.))
-#define beta 10.
-#define C_gamma (5. / 3.)
+#define C_pi (3.14159265358979)    /*value of pi*/
+#define C_euler (2.71828182845904) /* euler constant*/
+#define C_sigma (5.67051e-5)       /*Stephan Boltzmann constant*/
+#define BOLTZ_CGS (1.3806505e-16)  /*Boltzmann constant*/
+#define PLANCK_CGS (6.62606876e-27) /*Planck constant*/
+#define ERM_CGS (9.1093826e-28)     /*Electron rest mass CGS*/
+#define C_CGS (2.99792458e10)       /*Speed of light*/
+#define C_G (6.6726e-8)             /*Gravitational constant*/
+#define C_Msun (2e33)              /*Sun mass*/
+#define THOMSON_CGS (6.6524e-25)    /*Thomson cross section*/
 
 /*Mass of the Black hole*/
-#define C_Mbh 10. * C_Msun
-#define C_GM C_Mbh *C_G
+#define C_Mbh (10. * C_Msun)
+#define C_GM (C_Mbh * C_G)
 
-/*Disk geometry and polytropic constant*/
-#define rho_0 5e-7     /*Maximum density of initial condition*/
-#define r_0 100. * Rs  /*Radius of maximum density (rho_0)*/
-#define r_min 75. * Rs /*Minimum raius of torus*/
-#define CONST_2 -C_GM / (r_min - Rs) + C_GM / (2. * pow(r_min, 2.)) * (pow(r_0, 3.) / (pow((r_0 - Rs), 2)))
-#define kappa (C_gamma - 1.) / (C_gamma)*pow(rho_0, (1. - C_gamma)) * (CONST_2 + C_GM / (r_0 - Rs) - C_GM / 2. * r_0 / (pow(r_0 - Rs, 2.)))
 
-#define ITMAX 100     /* Used in calculating gamma function*/
-#define EPS 3.0e-7    /* Used in calculating gamma function*/
-#define FPMIN 1.0e-30 /* Used in calculating gamma function*/
+#define ITMAX (100)     /* Used in calculating gamma function*/
+#define eps (3e-7)
+#define maxSteps (1e3)
+#define FPMIN (1.0e-30) /* Used in calculating gamma function*/
 
 double edens;
 double etemp;
@@ -180,7 +167,7 @@ void gcf(double *gammcf, double agam, double xgam,
         d = 1.0 / d;
         del = d * c;
         h *= del;
-        if (fabs(del - 1.0) < EPS)
+        if (fabs(del - 1.0) < eps)
             break;
     }
     *gammcf = exp(-xgam + agam * log(xgam) - (*gln)) * h;
@@ -209,7 +196,7 @@ void gser(double *gamser, double agam, double xgam,
             ++ap;
             del *= xgam / ap;
             sum += del;
-            if (fabs(del) < fabs(sum) * EPS)
+            if (fabs(del) < fabs(sum) * eps)
             {
                 *gamser = sum * exp(-xgam + agam * log(xgam) - (*gln));
                 return;
@@ -281,19 +268,6 @@ double thetae(double etemp)
     double result = (BOLTZ_CGS)* etemp / ((ERM_CGS) * (pow(C_CGS, 2.)));
     return result;
 }
-
-/*double sound_speed(double edens)
-{
-    double result = pow((C_gamma) * (kappa)*pow(edens * 1.14 * C_amu, (C_gamma - 1.)), 1. / 2.);
-    return result;
-}*/
-
-/*double Bmag(double edens)
-{
-    // printf("edens = %le\n", edens);
-    double result = pow(8. * C_pi * pow(sound_speed(edens), 2.) * edens * 1.14 * C_amu / (beta + 1.), 1. / 2.);
-    return result;
-}*/
 
 double scale_height(double etemp)
 {

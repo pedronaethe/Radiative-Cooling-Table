@@ -33,19 +33,19 @@ int main()
 
 	while (k <= 99)
 	{
-		v2 = 12 + 8 * k/99;
+		v2 = 12 + 10 * k/99;
 		fprintf(Feletronicdensity, "%.2f\n", v2);
 		k = k + 1;
 	}
 	while (j <= 99)
 	{
-		v3 = 6 + 4 * j/99;
+		v3 = 4 + 11 * j/99;
 		fprintf(Ftemperature, "%.2f\n", v3);
 		j = j + 1;
 	}
 	while (l <= 99)
 	{
-		v4 = 0 + 7 * l/99;
+		v4 = 0 + 10 * l/99;
 		fprintf(Fmag, "%.2f\n", v4);
 		l = l + 1;
 	}
