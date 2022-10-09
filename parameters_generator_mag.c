@@ -45,7 +45,7 @@ int main()
 	}
 	while (l <= 99)
 	{
-		v4 = 0 + 10 * l/99;
+		v4 = 0.01 + 9.99 * l/99;
 		fprintf(Fmag, "%.2f\n", v4);
 		l = l + 1;
 	}

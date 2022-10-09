@@ -327,7 +327,7 @@ double bremmstrahlung_ee(double edens, double etemp)
     }
     else
     {
-        result = 3.42 * pow(10., -22.) * pow(edens, 2.) * thetae(etemp) * (log(1.123 * thetae(etemp)) + 1.24);
+        result = 3.42 * pow(10., -22.) * pow(edens, 2.) * thetae(etemp) * (log(1.123 * thetae(etemp)) + 1.28);
     }
     return result;
 }
@@ -336,7 +336,7 @@ double bremmstrahlung_ei(double edens, double etemp)
 {
     double th_e = thetae(etemp);
     double result;
-    if (th_e > 1)
+    if (th_e >= 1)
     {
         result = 1.48 * pow(10., -22.) * pow(edens, 2.) * (9 * thetae(etemp)) / (2 * C_pi) *
                  (log(1.123 * thetae(etemp) + 0.48) + 1.5);
@@ -388,31 +388,30 @@ double rsync(double edens, double etemp, double mag_field)
     }
 }
 
-// double comptonization_factor (double edens, double etemp){
-//	double thompson_opticaldepth = 2 * edens * THOMSON_CGS * etemp;
-//	double Afactor = 1 + 4 * thetae(etemp) + 16 * pow(thetae(etemp), 2.);
-//	double maxfactor = 3 * BOLTZ_CGS * etemp/(PLANCK_CGS * crit_freq(edens, etemp, mag_field));
-//	double jm = log(maxfactor)/log(Afactor);
-//	double s = thompson_opticaldepth + pow(thompson_opticaldepth, 2.);
-//	/*printf("O valor de bsq é%le\n", bsq);
-//	printf("O valor de thompson optical depth é%le\n", thompson_opticaldepth);
-//	printf("O valor de Afactor é%le\n", Afactor);
-//	printf("O valor de nuzero é%le\n", nuzero);
-//	printf("O valor de maxfactor é%le\n", maxfactor);
-//	printf("O valor de jm é%le\n", jm);
-//	printf("O valor de s é%le\n", s);
-//	printf("O valor de gammp(As) é%le\n", gammp(jm - 1, Afactor * s));
-//	printf("O valor de gammp(s) é%le\n", gammp(jm +1, s));*/
-//
-//	double result = pow(C_euler, s*(Afactor -1))*(1 - gammp(jm - 1, Afactor * s)) + maxfactor * gammp(jm +1, s);
-//	if (isnan(result)){
-//	result = maxfactor * gammp(jm +1, s);
-// }
-//	/*printf("O valor de resultado é%le\n", result);*/
-//
-//	return result;
-//
-// }
+double comptonization_factor (double edens, double etemp, double mag_field){
+	double thompson_opticaldepth = 2 * edens * THOMSON_CGS * etemp;
+	double Afactor = 1 + 4 * thetae(etemp) + 16 * pow(thetae(etemp), 2.);
+	double maxfactor = 3 * BOLTZ_CGS * etemp/(PLANCK_CGS * crit_freq(edens, etemp, mag_field));
+	double jm = log(maxfactor)/log(Afactor);
+	double s = thompson_opticaldepth + pow(thompson_opticaldepth, 2.);
+	// printf("O valor de thompson optical depth é%le\n", thompson_opticaldepth);
+	// printf("O valor de Afactor é%le\n", Afactor);
+	// printf("O valor de maxfactor é%le\n", maxfactor);
+    // printf("O valor da critfreq é%le\n", crit_freq(edens, etemp, mag_field));
+	// printf("O valor de jm é%le\n", jm);
+	// printf("O valor de s é%le\n", s);
+	// printf("O valor de gammp(As) é%le\n", gammp(jm - 1, Afactor * s));
+	// printf("O valor de gammp(s) é%le\n", gammp(jm +1, s));
+
+	double result = pow(C_euler, s*(Afactor -1))*(1 - gammp(jm - 1, Afactor * s)) + maxfactor * gammp(jm +1, s);
+	if (isnan(result)){
+	result = maxfactor * gammp(jm +1, s);
+}
+	/*printf("O valor de resultado é%le\n", result);*/
+
+	return result;
+
+}
 
 /*scattering optical depth*/
 
@@ -422,18 +421,18 @@ double soptical_depth(double edens, double etemp)
     return result;
 }
 
-double comptonization_factor_artur(double edens, double etemp, double mag_field)
-{
-    double prob = 1 - pow(C_euler, -soptical_depth(edens, etemp));
-    double A = 1 + 4 * thetae(etemp) + 16 * pow(thetae(etemp), 2.);
-    double result = 1 + prob * (A - 1) / (1 - prob * A) * (1 - pow((PLANCK_CGS * crit_freq(edens, etemp, mag_field) / (3 * thetae(etemp) * ERM_CGS * pow(C_CGS, 2.))), -1 - log(prob) / log(A)));
-    return result;
-}
+// double comptonization_factor_artur(double edens, double etemp, double mag_field)
+// {
+//     double prob = 1 - pow(C_euler, -soptical_depth(edens, etemp));
+//     double A = 1 + 4 * thetae(etemp) + 16 * pow(thetae(etemp), 2.);
+//     double result = 1 + prob * (A - 1) / (1 - prob * A) * (1 - pow((PLANCK_CGS * crit_freq(edens, etemp, mag_field) / (3 * thetae(etemp) * ERM_CGS * pow(C_CGS, 2.))), -1 - log(prob) / log(A)));
+//     return result;
+// }
 
 double totalthincooling_rate(double edens, double etemp, double mag_field)
 {
     double result =
-        bremmstrahlung_ee(edens, etemp) + bremmstrahlung_ei(edens, etemp) + rsync(edens, etemp, mag_field) * comptonization_factor_artur(edens, etemp, mag_field);
+        bremmstrahlung_ee(edens, etemp) + bremmstrahlung_ei(edens, etemp) + rsync(edens, etemp, mag_field) * comptonization_factor(edens, etemp, mag_field);
     return result;
 }
 
@@ -460,14 +459,14 @@ double total_cooling(double edens, double etemp, double mag_field)
 
 int main()
 {
-    /*printf("valor de radius\n");
-    scanf("%le", &radius);
-    printf("Valor de edens\n");
-    scanf("%le", &edens);
-    printf ("valor de etemp\n");
-    scanf("%le", &etemp);
-    printf ("valor do B\n");
-    scanf("%le", &mag_field);*/
+    // printf("valor de radius\n");
+    // scanf("%le", &radius);
+    // printf("Valor de edens\n");
+    // scanf("%le", &edens);
+    // printf ("valor de etemp\n");
+    // scanf("%le", &etemp);
+    // printf ("valor do B\n");
+    // scanf("%le", &mag_field);
     //        printf("\nOne of the roots is: %lf\n",secant(f));
     //	printf("O valor do bremmstrahlung cooling rate é:%le\n", bremmscooling_rate(edens, etemp));
     //	printf("o valor do thetae é:%le\n", thetae(etemp));
@@ -476,7 +475,7 @@ int main()
     //	printf("o valor do cooling total no disco fino é:%le\n", totalthincooling_rate(edens, etemp));
     //	printf("o valor do rsync é: %le\n", rsync(edens, etemp, mag_field));
     //	printf("o valor do comptonization factor é: %le\n", comptonization_factor(edens, etemp));
-    //	printf("o valor do comptonization factor artur é: %le\n", comptonization_factor_artur(edens, etemp));
+    //	printf("o valor do comptonization factor artur é: %le\n", comptonization_factor_artur(edens, etemp, mag_field));
     //	printf("o valor da freq crit é: %le\n", crit_freq(edens, etemp, mag_field));
     //	printf("O valor do tau_scat é:%le\n", soptical_depth(radius, edens));
     //	printf("O valor do tau_abs é:%le\n", absoptical_depth(radius, edens, etemp));
@@ -524,17 +523,6 @@ int main()
             }
         }
     }
-    // Run for values in the natural scale (not log scale)
-    // while(fscanf(file_radius, "%lf,", &radius) == 1) {
-    //     rewind(file_e_density);
-    //     while(fscanf(file_e_density, "%lf,", &edens) == 1) {
-    //         rewind(file_temperature);
-    //         while(fscanf(file_temperature, "%lf,", &etemp) == 1) {
-    //             cooling = total_cooling(radius, edens, etemp);
-    //             fprintf(file_result,"%lf, %lf, %lf, %lf\n", radius, edens, etemp, cooling);
-    //         }
-    //     }
-    // }
 
     fclose(file_e_density);
     fclose(file_temperature);

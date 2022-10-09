@@ -153,7 +153,7 @@ __global__ void cooling_function(float a1, float a2, float a3)
     const int nx = 100; //Number of te used to generate table
     const int ny = 100; //Number of ne used to generate table
     const int nz = 100; //Number of Bmag used to generate table
-     v1 = (round((v1 - 0) * (nz - 1)/10) + 0.5)/nz;
+     v1 = (round((v1 - 0.1) * (nz - 1)/9.99) + 0.5)/nz;
      v2 = (round((v2 - 12) * (ny - 1)/10) + 0.5 )/ny;
      v3 = (round((v3 - 4) * (nx - 1)/11) + 0.5 )/nx;
 
