@@ -39,7 +39,9 @@ This will generate a cooling_table_log_mag.txt, which is where the cooling table
 
 To compile:
 
-```$nvcc cooling_texture_mag.cu -o coolingtexture -lm```
+```$nvcc -arch=sm_60 -o coolingtexture cooling_texture_mag.cu -lm```
+
+Change the number of your GPU compute capability, replace "60" with your own ```-arch=sm_XX```. You can find its number [here](https://developer.nvidia.com/cuda-gpus)
 
 To run:
 
