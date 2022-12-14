@@ -35,11 +35,13 @@ This will generate a cooling_table_log_mag.txt, which is where the cooling table
 
 **Note: This may take a while, probably around ~40 min depending on your CPU**
 
-### 3. Compile cooling_texture_mag.cu and run in order to test if the texture memory fetching is correct. This will help to introduce a faster cooling in GPU based GRMHD simulations. 
+### 3. Compile cooling_texture_mag.cu and run in order to test if the texture memory fetching is correct. This will help to introduce a faster cooling in GPU based GRMHD simulations. **This will work in Nvidia GPUs only**. 
 
 To compile:
 
-```$nvcc cooling_texture_mag.cu -o coolingtexture -lm```
+```$nvcc -arch=sm_60 -o coolingtexture cooling_texture_mag.cu -lm```
+
+Change the number of your GPU compute capability, replace "60" with your own ```-arch=sm_XX```. You can find its number [here](https://developer.nvidia.com/cuda-gpus)
 
 To run:
 
