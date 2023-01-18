@@ -491,7 +491,7 @@ int main()
     FILE *file_mag_field;
     file_mag_field = fopen("mag.txt", "r");
     FILE *file_result;
-    file_result = fopen("cooling_table_log_mag.txt", "w");
+    file_result = fopen("cooling_table_new.txt", "w");
 
     float cooling;
 
