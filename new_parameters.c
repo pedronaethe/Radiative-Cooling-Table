@@ -10,8 +10,8 @@ int main()
 	double v3 = 0;
 	double v4 = 0;
 	double i = 0, j = 0, k = 0, l = 0;
-    FILE *Fradius;
-    Fradius = fopen("radius.txt", "w");
+    FILE *Fheight;
+    Fheight = fopen("scale_height.txt", "w");
 	FILE *Ftemperature;
 	Ftemperature = fopen("te.txt", "w");
 	FILE *Feletronicdensity;
@@ -35,8 +35,8 @@ int main()
 	// }
     while (i <= 31)
     {
-        v1 = 6 + 3 * i/31;
-        fprintf(Fradius, "%.2f\n", v1);
+        v1 = 4 + 6 * i/31;
+        fprintf(Fheight, "%.2f\n", v1);
         i = i + 1;
     }
 	while (k <= 31)
@@ -58,7 +58,7 @@ int main()
 		l = l + 1;
 	}
 
-    fclose(Fradius);
+    fclose(Fheight);
 	fclose(Ftemperature);
 	fclose(Feletronicdensity);
 	fclose(Fmag);

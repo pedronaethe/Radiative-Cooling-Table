@@ -271,7 +271,7 @@ double thetae(double etemp)
     return result;
 }
 
-double scale_height(double radius, double edens, double etemp)
+/*double scale_height(double radius, double edens, double etemp)
 {
     double rho = edens * MH_CGS;
     if(ARAD_CGS * pow(etemp, 3.)/(edens * BOLTZ_CGS) > 1.){
@@ -280,19 +280,19 @@ double scale_height(double radius, double edens, double etemp)
     else{
         return pow(BOLTZ_CGS * etemp/(MH_CGS * C_G * C_Mbh),1./2.) * pow(radius, 3./2.);
     }
-}
+}*/
 
-double f(double radius, double x, double edens, double etemp, double mag_field)
+double f(double scale_height, double x, double edens, double etemp, double mag_field)
 {
     if (thetae(etemp) < 0.03)
     {
         return pow(C_euler, 1.8899 * pow(x, 1. / 3.)) -
-               2.49 * pow(10., -10.) * 12. * C_pi * edens * scale_height(radius, edens, etemp) / (mag_field) * 1./ (2. * pow(thetae(etemp), 5.)) *
+               2.49 * pow(10., -10.) * 12. * C_pi * edens * scale_height / (mag_field) * 1./ (2. * pow(thetae(etemp), 5.)) *
                    (1 / pow(x, 7. / 6.) + 0.4 / pow(x, 17. / 12.) + 0.5316 / pow(x, 5. / 3.));
     }
     else
     {
-        return pow(C_euler, 1.8899 * pow(x, 1. / 3.)) - 2.49 * pow(10., -10.) * 12. * C_pi * edens * scale_height(radius, edens, etemp) / (mag_field) * 1 /
+        return pow(C_euler, 1.8899 * pow(x, 1. / 3.)) - 2.49 * pow(10., -10.) * 12. * C_pi * edens * scale_height / (mag_field) * 1 /
                                                             (pow(thetae(etemp), 3.) * bessk2(1 / thetae(etemp))) *
                                                             (1. / pow(x, 7. / 6.) + 0.4 / pow(x, 17. / 12.) +
                                                              0.5316 / pow(x, 5. / 3.));
@@ -300,7 +300,7 @@ double f(double radius, double x, double edens, double etemp, double mag_field)
 }
 
 /*Function that returns the root from Secant Method*/
-double secant(double radius, double edens, double etemp, double mag_field)
+double secant(double scale_height, double edens, double etemp, double mag_field)
 {
     int iter = 1;
     double x1 = 1.;
@@ -308,7 +308,7 @@ double secant(double radius, double edens, double etemp, double mag_field)
     double x3;
     do
     {
-        x3 = (x1 * f(radius, x2, edens, etemp, mag_field) - x2 * f(radius, x1, edens, etemp, mag_field)) / (f(radius, x2, edens, etemp, mag_field) - f(radius, x1, edens, etemp, mag_field));
+        x3 = (x1 * f(scale_height, x2, edens, etemp, mag_field) - x2 * f(scale_height, x1, edens, etemp, mag_field)) / (f(scale_height, x2, edens, etemp, mag_field) - f(scale_height, x1, edens, etemp, mag_field));
         if (isnan(x3) || isinf(x3))
         {
             x1 = x2;
@@ -319,7 +319,7 @@ double secant(double radius, double edens, double etemp, double mag_field)
         iter++;
         // printf("x3 = %lf\n", x3);
         // printf("x1 = %lf\n", x1);
-    } while (fabs(f(radius, x3, edens, etemp, mag_field)) > eps && iter <= maxSteps);
+    } while (fabs(f(scale_height, x3, edens, etemp, mag_field)) > eps && iter <= maxSteps);
     return x1;
 }
 
@@ -362,13 +362,13 @@ double bremmscooling_rate(double edens, double etemp)
     return result;
 }
 
-double crit_freq(double radius, double edens, double etemp, double mag_field)
+double crit_freq(double scale_height, double edens, double etemp, double mag_field)
 {
-    return (1.5) * (2.80 * pow(10.,6.) * mag_field) * pow(thetae(etemp), 2.) * secant(radius, edens, etemp, mag_field);
+    return (1.5) * (2.80 * pow(10.,6.) * mag_field) * pow(thetae(etemp), 2.) * secant(scale_height, edens, etemp, mag_field);
 }
 
 /*Synchtron radiation calculation*/
-double rsync(double radius, double edens, double etemp, double mag_field)
+double rsync(double scale_height, double edens, double etemp, double mag_field)
 {
     double nuzero = 2.80 * pow(10., 6.) * mag_field;
     double a1 = 2. / (3. * nuzero * pow(thetae(etemp), 2.));
@@ -377,33 +377,34 @@ double rsync(double radius, double edens, double etemp, double mag_field)
     double a4 = 1.8899 * pow(a1, 1. / 3.);
     if (thetae(etemp) > 0.03)
     {
-        double result = 2. * C_pi * BOLTZ_CGS * etemp * pow(crit_freq(radius, edens, etemp, mag_field), 3.) / (3. * scale_height(radius, edens, etemp) * pow(C_CGS, 2.));
-        result +=6.76 * pow(10., -28.) * edens / (bessk2(1. / thetae(etemp)) * pow(a1, 1. / 6.));
-        result *= (1. / pow(a4, 11. / 2.) * gammq(11. / 2., a4 * pow(crit_freq(radius, edens, etemp, mag_field), 1. / 3.)) +
-                 a2 / pow(a4, 19. / 4.) * gammq(19. / 4., a4 * pow(crit_freq(radius, edens, etemp, mag_field), 1. / 3.)) + a3 / pow(a4, 4.) * (pow(a4, 3.) * crit_freq(radius, edens, etemp, mag_field) + 3. * pow(a4, 2.) * pow(crit_freq(radius, edens, etemp, mag_field), 2. / 3.) + 6. * a4 * pow(crit_freq(radius, edens, etemp, mag_field), 1. / 3.) + 6.) * pow(C_euler, -a4 * pow(crit_freq(radius, edens, etemp, mag_field), 1. / 3.)));
+        double result = 2. * C_pi * BOLTZ_CGS * etemp * pow(crit_freq(scale_height, edens, etemp, mag_field), 3.) / (3. * scale_height * pow(C_CGS, 2.));
+        double result2 =6.76 * pow(10., -28.) * edens / (bessk2(1. / thetae(etemp)) * pow(a1, 1. / 6.));
+        result2 = result2 * (1. / pow(a4, 11. / 2.) * gammq(11. / 2., a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.)) +
+                 a2 / pow(a4, 19. / 4.) * gammq(19. / 4., a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.)) + a3 / pow(a4, 4.) * (pow(a4, 3.) * crit_freq(scale_height, edens, etemp, mag_field) + 3. * pow(a4, 2.) * pow(crit_freq(scale_height, edens, etemp, mag_field), 2. / 3.) + 6. * a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.) + 6.) * pow(C_euler, -a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.)));
+        result = result + result2;
         return result;
     }
     else
     {
-        double result =
-            2. * C_pi * BOLTZ_CGS * etemp * pow(crit_freq(radius, edens, etemp, mag_field), 3.) / (3. * scale_height(radius, edens, etemp) * pow(C_CGS, 2.)) +
-            6.76 * pow(10., -28.) * edens / (2. * pow(thetae(etemp), 2.) * pow(a1, 1. / 6.)) *
-                (1. / pow(a4, 11. / 2.) * gammq(11. / 2., a4 * pow(crit_freq(radius, edens, etemp, mag_field), 1. / 3.)) +
-                 a2 / pow(a4, 19. / 4.) * gammq(19. / 4., a4 * pow(crit_freq(radius, edens, etemp, mag_field), 1. / 3.)) + a3 / pow(a4, 4.) * (pow(a4, 3.) * crit_freq(radius, edens, etemp, mag_field) + 3. * pow(a4, 2.) * pow(crit_freq(radius, edens, etemp, mag_field), 2. / 3.) + 6. * a4 * pow(crit_freq(radius, edens, etemp, mag_field), 1. / 3.) + 6.) * pow(C_euler, -a4 * pow(crit_freq(radius, edens, etemp, mag_field), 1. / 3.)));
+        double result = 2. * C_pi * BOLTZ_CGS * etemp * pow(crit_freq(scale_height, edens, etemp, mag_field), 3.) / (3. * scale_height * pow(C_CGS, 2.));
+        double result2 = 6.76 * pow(10., -28.) * edens / (2. * pow(thetae(etemp), 2.) * pow(a1, 1. / 6.));
+        result2 = result2 * (1. / pow(a4, 11. / 2.) * gammq(11. / 2., a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.)) +
+                 a2 / pow(a4, 19. / 4.) * gammq(19. / 4., a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.)) + a3 / pow(a4, 4.) * (pow(a4, 3.) * crit_freq(scale_height, edens, etemp, mag_field) + 3. * pow(a4, 2.) * pow(crit_freq(scale_height, edens, etemp, mag_field), 2. / 3.) + 6. * a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.) + 6.) * pow(C_euler, -a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.)));
+        result = result + result2;
         return result;
     }
 }
 
-double comptonization_factor (double radius, double edens, double etemp, double mag_field){
+double comptonization_factor (double scale_height, double edens, double etemp, double mag_field){
 	double thompson_opticaldepth = 2. * edens * THOMSON_CGS * etemp;
 	double Afactor = 1. + 4. * thetae(etemp) + 16. * pow(thetae(etemp), 2.);
-	double maxfactor = 3 * BOLTZ_CGS * etemp/(PLANCK_CGS * crit_freq(radius, edens, etemp, mag_field));
+	double maxfactor = 3 * BOLTZ_CGS * etemp/(PLANCK_CGS * crit_freq(scale_height, edens, etemp, mag_field));
 	double jm = log(maxfactor)/log(Afactor);
 	double s = thompson_opticaldepth + pow(thompson_opticaldepth, 2.);
 	// printf("O valor de thompson optical depth é%le\n", thompson_opticaldepth);
 	// printf("O valor de Afactor é%le\n", Afactor);
 	// printf("O valor de maxfactor é%le\n", maxfactor);
-    // printf("O valor da critfreq é%le\n", crit_freq(radius, edens, etemp, mag_field));
+    // printf("O valor da critfreq é%le\n", crit_freq(scale_height, edens, etemp, mag_field));
 	// printf("O valor de jm é%le\n", jm);
 	// printf("O valor de s é%le\n", s);
 	// printf("O valor de gammp(As) é%le\n", gammp(jm - 1, Afactor * s));
@@ -421,9 +422,9 @@ double comptonization_factor (double radius, double edens, double etemp, double 
 
 /*scattering optical depth*/
 
-double soptical_depth(double radius, double edens, double etemp)
+double soptical_depth(double scale_height, double edens, double etemp)
 {
-    double result = 2. * edens * THOMSON_CGS * scale_height(radius, edens, etemp);
+    double result = 2. * edens * THOMSON_CGS * scale_height;
     return result;
 }
 
@@ -431,42 +432,42 @@ double soptical_depth(double radius, double edens, double etemp)
 // {
 //     double prob = 1 - pow(C_euler, -soptical_depth(edens, etemp));
 //     double A = 1 + 4 * thetae(etemp) + 16 * pow(thetae(etemp), 2.);
-//     double result = 1 + prob * (A - 1) / (1 - prob * A) * (1 - pow((PLANCK_CGS * crit_freq(radius, edens, etemp, mag_field) / (3 * thetae(etemp) * ERM_CGS * pow(C_CGS, 2.))), -1 - log(prob) / log(A)));
+//     double result = 1 + prob * (A - 1) / (1 - prob * A) * (1 - pow((PLANCK_CGS * crit_freq(scale_height, edens, etemp, mag_field) / (3 * thetae(etemp) * ERM_CGS * pow(C_CGS, 2.))), -1 - log(prob) / log(A)));
 //     return result;
 // }
 
-double totalthincooling_rate(double radius, double edens, double etemp, double mag_field)
+double totalthincooling_rate(double scale_height, double edens, double etemp, double mag_field)
 {
     double result =
-        bremmstrahlung_ee(edens, etemp) + bremmstrahlung_ei(edens, etemp) + rsync(radius, edens, etemp, mag_field) * comptonization_factor(radius, edens, etemp, mag_field);
+        bremmstrahlung_ee(edens, etemp) + bremmstrahlung_ei(edens, etemp) + rsync(scale_height, edens, etemp, mag_field) * comptonization_factor(scale_height, edens, etemp, mag_field);
     return result;
 }
 
 /*Absorption optical depth*/
-double absoptical_depth(double radius, double edens, double etemp, double mag_field)
+double absoptical_depth(double scale_height, double edens, double etemp, double mag_field)
 {
-    double result = 1. / (4. * C_sigma * pow(etemp, 4.)) * scale_height(radius, edens, etemp) * totalthincooling_rate(radius, edens, etemp, mag_field);
+    double result = 1. / (4. * C_sigma * pow(etemp, 4.)) * scale_height * totalthincooling_rate(scale_height, edens, etemp, mag_field);
     return result;
 }
 
 /*Total optical depth*/
-double total_optical_depth(double radius, double edens, double etemp, double mag_field)
+double total_optical_depth(double scale_height, double edens, double etemp, double mag_field)
 {
-    double result = soptical_depth(radius, edens, etemp) + absoptical_depth(radius, edens, etemp, mag_field);
+    double result = soptical_depth(scale_height, edens, etemp) + absoptical_depth(scale_height, edens, etemp, mag_field);
     return result;
 }
 
 /*Total cooling with thin and thick disk*/
-double total_cooling(double radius, double edens, double etemp, double mag_field)
+double total_cooling(double scale_height, double edens, double etemp, double mag_field)
 {
-    return 4. * C_sigma * pow(etemp, 4.) / scale_height(radius, edens, etemp) * 1 /
-           (3 * total_optical_depth(radius, edens, etemp, mag_field) / 2. + pow(3., 1. / 2.) + 1. / absoptical_depth(radius, edens, etemp, mag_field));
+    return 4. * C_sigma * pow(etemp, 4.) / scale_height * 1 /
+           (3 * total_optical_depth(scale_height, edens, etemp, mag_field) / 2. + pow(3., 1. / 2.) + 1. / absoptical_depth(scale_height, edens, etemp, mag_field));
 }
 
 int main()
 {
 
-    double r;
+    double H;
     double ne;
     double te;
     double B;
@@ -475,38 +476,35 @@ int main()
     // char str[1];
     // while (loop > 1)
     // {
-    //     printf("valor de radius\n");
-    //     scanf("%le", &r);
-    //     r = pow(10, r);
+    //     printf("valor do scale_height\n");
+    //     scanf("%le", &H);
+    //     H = pow(10, H);
+    //     printf ("valor do B\n");
+    //     scanf("%le", &B);
+    //     B = pow(10, B);
     //     printf("Valor de edens\n");
     //     scanf("%le", &ne);
     //     ne = pow(10, ne);
     //     printf ("valor de etemp\n");
     //     scanf("%le", &te);
     //     te= pow(10, te);
-    //     printf ("valor do B\n");
-    //     scanf("%le", &B);
-    //     B = pow(10, B);
-    //     double rho = ne * MH_CGS;
-    //     double H = pow(ARAD_CGS * pow(te,4.)/(3 * rho * C_G * C_Mbh) ,1./2.) * pow(r, 3./2.);
-    //     printf("R = %le, ne = %le, Te = %le, B = %le\n", r, ne, te, B);
-    //     printf("\nOne of the roots is: %lf\n",secant(r, ne, te, B));
+    //     printf("H = %le, ne = %le, Te = %le, B = %le\n", H, ne, te, B);
+    //     printf("\nOne of the roots is: %lf\n",secant(H, ne, te, B));
     //     printf("o valor do thetae é:%le\n", thetae(te));
-    //     printf("Rho = %le\n", rho);
-    //     printf("o valor do H_aqui é:%le\n", H);
-    //     printf("o valor do H é:%le\n", scale_height(r, ne, te));
+    //     //printf("o valor do H_aqui é:%le\n", H);
+    //     //printf("o valor do H é:%le\n", scale_height(H, ne, te));
     //     printf("O valor do bremmstrahlung ee é:%le\n", bremmstrahlung_ee(ne, te));
     //     printf("O valor do bremmstrahlung ei é:%le\n", bremmstrahlung_ei(ne, te));
     //     printf("O valor do bremmstrahlung total é:%le\n", bremmscooling_rate(ne, te));
-    //     printf("o valor da freq crit é: %le\n", crit_freq(r, ne, te, B));
-    //     printf("o valor do rsync é: %le\n", rsync(r, ne, te, B));
-    //     printf("o valor do comptonization factor é: %le\n", comptonization_factor(r, ne, te, B));
-    //     printf("o valor do cooling total no disco fino é:%le\n", totalthincooling_rate(r, ne, te, B));
-    //     printf("O valor do tau_scat é:%le\n", soptical_depth(r, ne, te));
-    //     printf("O valor do tau_abs é:%le\n", absoptical_depth(r, ne, te, B));
-    //     printf("O valor do tau_total é:%le\n", total_optical_depth(r, ne, te, B));
-    //     printf("o valor do cooling total é:%le\n", total_cooling(r, ne, te, B));
-    //     printf("o valor do cooling total em log:%le\n", log10(total_cooling(r, ne, te, B)));
+    //     printf("o valor da freq crit é: %le\n", crit_freq(H, ne, te, B));
+    //     printf("o valor do rsync é: %le\n", rsync(H, ne, te, B));
+    //     printf("o valor do comptonization factor é: %le\n", comptonization_factor(H, ne, te, B));
+    //     printf("o valor do cooling total no disco fino é:%le\n", totalthincooling_rate(H, ne, te, B));
+    //     printf("O valor do tau_scat é:%le\n", soptical_depth(H, ne, te));
+    //     printf("O valor do tau_abs é:%le\n", absoptical_depth(H, ne, te, B));
+    //     printf("O valor do tau_total é:%le\n", total_optical_depth(H, ne, te, B));
+    //     printf("o valor do cooling total é:%le\n", total_cooling(H, ne, te, B));
+    //     printf("o valor do cooling total em log:%le\n", log10(total_cooling(H, ne, te, B)));
     //     sleep(1);
     //     printf("Do you want to read other values? y/n\n");
     //     scanf("%s", str);
@@ -516,8 +514,8 @@ int main()
     //     }
     // }
     
-    FILE *file_radius;
-    file_radius = fopen("radius.txt", "r");
+    FILE *file_height;
+    file_height = fopen("scale_height.txt", "r");
     FILE *file_e_density;
     file_e_density = fopen("ne.txt", "r");
     FILE *file_temperature;
@@ -535,9 +533,9 @@ int main()
         exit(0);
     }
 
-    fprintf(file_result, "radius, mag_field, e_density, temperature, cooling\n");
+    fprintf(file_result, "scale_height, mag_field, e_density, temperature, cooling\n");
     // run for logarithm values
-    while (fscanf(file_radius, "%lf", &r) == 1){
+    while (fscanf(file_height, "%lf", &H) == 1){
         rewind(file_mag_field);
         while (fscanf(file_mag_field, "%lf,", &B) == 1)
         {
@@ -547,13 +545,13 @@ int main()
                 rewind(file_temperature);
                 while (fscanf(file_temperature, "%lf,", &te) == 1)
                 {
-                        fprintf(file_result, "%.2f, %.2f, %.2f, %.2f,", r, B, ne, te);
-                        r = pow(10., r);
+                        fprintf(file_result, "%.2f, %.2f, %.2f, %.2f,", H, B, ne, te);
+                        H = pow(10., H);
                         ne = pow(10., ne);
                         te = pow(10., te);
                         B = pow(10., B);
-                        cooling = log10(total_cooling(r, ne, te, B));
-                        r = log10(r);
+                        cooling = log10(total_cooling(H, ne, te, B));
+                        H = log10(H);
                         ne = log10(ne);
                         te = log10(te);
                         B = log10(B);
@@ -562,7 +560,7 @@ int main()
             }
         }
     }
-    fclose(file_radius);
+    fclose(file_height);
     fclose(file_e_density);
     fclose(file_temperature);
     fclose(file_result);
