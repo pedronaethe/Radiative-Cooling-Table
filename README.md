@@ -23,7 +23,7 @@ You'll see four ```.txt``` files inside the folder: scale_height.txt, mag.txt, n
 
 **Note: Please, becareful, if you wish to change the number of values for each parameters, for example, from 100 to 200, you need to change the other .c/.cu files as well because they were made for my case.**
 
-### 2.0 Compile cooling_table.c and run 
+### 2. Compile cooling_table.c and run 
 
 This will generate a .txt file containing a table $(32 \times 32 \times 32 \times 32)$ with parameters $H_T$, $B$, $n_e$ and $T_e$ and cooling values. The first line of the file indicates what each column represents.
 
@@ -39,7 +39,7 @@ This will generate a cooling_table.txt, which is where the cooling table is loca
 
 **Note: This may take a while, probably around ~40 min depending on your CPU**
 
-### 2.1 Compile coulomb_table.c and run
+### 3. Compile coulomb_table.c and run
 
 This will generate a .txt file containing a table $(100 \times 100 \times 100)$ with parameters $n_e$, $T_i$ and $T_e$ and coulomb values. The first line of the file indicates what each column represents.
 To compile coulomb_table.c, type in the terminal:
@@ -50,7 +50,7 @@ To run, type:
 
 ```$./coulomb_table```
 
-### 3.0 Compile cooling_texture.cu and run 
+### 4. Compile cooling_texture.cu and run 
 
 Do this in order to test if the texture memory fetching is correct. This will help to introduce a faster cooling in GPU based GRMHD simulations. **This will work in Nvidia GPUs only**. 
 
@@ -64,7 +64,7 @@ To run:
 
 ```$./cooling_texture```
 
-### 3.0 Compile coulomb_texture.cu and run 
+### 5. Compile coulomb_texture.cu and run 
 
 Do this in order to test if the texture memory fetching is correct. This will help to introduce a faster cooling in GPU based GRMHD simulations. **This will work in Nvidia GPUs only**. 
 
