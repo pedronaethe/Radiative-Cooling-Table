@@ -35,19 +35,19 @@ int main()
 	// }
     while (i <= 31)
     {
-        v1 = 4 + 6 * i/31;
+        v1 = 3 + 5 * i/31;
         fprintf(Fheight, "%.2f\n", v1);
         i = i + 1;
     }
 	while (k <= 31)
 	{
-		v2 = 12 + 10 * k/31;
+		v2 = 10 + 15 * k/31;
 		fprintf(Feletronicdensity, "%.2f\n", v2);
 		k = k + 1;
 	}
 	while (j <= 31)
 	{
-		v3 = 4 + 11 * j/31;
+		v3 = 2 + 13 * j/31;
 		fprintf(Ftemperature, "%.2f\n", v3);
 		j = j + 1;
 	}

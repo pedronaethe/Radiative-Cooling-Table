@@ -4,19 +4,27 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#define _USE_MATH_DEFINES
 
-#define MH_CGS (1.6726231e-24) /*hydrogen mass*/
-#define ARAD_CGS (7.5646e-15) /*radiative constant*/
-#define C_pi (3.14159265358979)    /*value of pi*/
-#define C_euler (2.71828182845904) /* euler constant*/
+#define MH_CGS (1.673534e-24) /*hydrogen mass*/
 #define C_sigma (5.67051e-5)       /*Stephan Boltzmann constant*/
-#define BOLTZ_CGS (1.3806505e-16)  /*Boltzmann constant*/
-#define PLANCK_CGS (6.62606876e-27) /*Planck constant*/
-#define ERM_CGS (9.1093826e-28)     /*Electron rest mass CGS*/
+#define C_PI (3.141592653589793)       /*Pi*/
+#define BOLTZ_CGS (1.3806504e-16)  /*Boltzmann constant*/
+#define PLANCK_CGS (6.6260755e-27) /*Planck constant*/
+#define ERM_CGS (9.10938215e-28)     /*Electron rest mass CGS*/
 #define C_CGS (2.99792458e10)       /*Speed of light*/
-#define C_G (6.6726e-8)             /*Gravitational constant*/
-#define C_Msun (2e33)              /*Sun mass*/
-#define THOMSON_CGS (6.6524e-25)    /*Thomson cross section*/
+#define C_G (6.67259e-8)             /*Gravitational constant*/
+#define C_Msun (1.998e33)              /*Sun mass*/
+#define THOMSON_CGS (6.652e-25)    /*Thomson cross section*/
+
+/*battery of tests, for normal table generation, just put everything equals to 0*/
+#define BLACKBODYTEST (0) //Generates a table for the blackbody equation
+#define SYNCHROTRONTEST (0) //Generates a table for synchrotron equation
+#define C_SYNCHROTRONTEST (0)// Generates a table for comptonized synchrotron equation
+#define COMPTONTEST (0) // Generates a table with the compton values
+#define BREMSTRAHLUNGTEST (0) //Generates a table for bremmstrahlung equation
+#define ABSORPTIONDEPTHTEST (0) //Generates a table with absorption values
+#define SINGLE_VALUE (0) // Individual value of every function for a certain quantity of parameters
 
 /*Mass of the Black hole*/
 #define C_Mbh (10. * C_Msun)
@@ -25,8 +33,8 @@
 #define R_CGS (C_G * C_Mbh/(C_CGS**2))
 
 
-#define ITMAX (100)     /* Used in calculating gamma function*/
-#define eps (3e-7)
+#define ITMAX (1e8)     /* Used in calculating gamma function*/
+#define EPS (3e-7)
 #define maxSteps (1e3)
 #define FPMIN (1.0e-30) /* Used in calculating gamma function*/
 
@@ -34,6 +42,14 @@
 double gammln(double xxgam);
 
 /***********************************************************************************************/
+void nrerror(char error_text[])
+/* Numerical Recipes standard error handler */
+{
+    fprintf(stderr,"Numerical Recipes run-time error...\n");
+    fprintf(stderr,"%s\n",error_text);
+    fprintf(stderr,"...now exiting to system...\n");
+    //exit(1);
+}
 double bessi0(double xbess)
 {
     double ax, ans;
@@ -145,123 +161,219 @@ double bessk2(double xbess)
     return bk;
 }
 
-void gcf(double *gammcf, double agam, double xgam,
-         double *gln)
-{ // Function used in the calculation of incomplete gamma function
+// void gcf(double *gammcf, double agam, double xgam,
+//          double *gln)
+// { // Function used in the calculation of incomplete gamma function
+//     int i;
+//     double an, b, c, d, del, h;
+//     *gln = gammln(agam);
+//     b = xgam + 1.0 - agam;
+//     c = 1.0 / FPMIN;
+//     d = 1.0 / b;
+//     h = d;
+//     for (i = 1; i <= ITMAX; i++)
+//     {
+//         an = -i * (i - agam);
+//         b += 2.0;
+//         d = an * d + b;
+//         if (fabs(d) < FPMIN)
+//             d = FPMIN;
+//         c = b + an / c;
+//         if (fabs(c) < FPMIN)
+//             c = FPMIN;
+//         d = 1.0 / d;
+//         del = d * c;
+//         h *= del;
+//         if (fabs(del - 1.0) < eps)
+//             break;
+//     }
+//     *gammcf = exp(-xgam + agam * log(xgam) - (*gln)) * h;
+// }
+void gcf(double *gammcf, double a, double x, double *gln)
+/*Returns the incomplete gamma function Q(a, x) evaluated by its continued fraction representation as gammcf. Also returns ln Γ(a) as gln.*/
+{
+    double gammln(double xx);
+    void nrerror(char error_text[]);
     int i;
-    double an, b, c, d, del, h;
-    *gln = gammln(agam);
-    b = xgam + 1.0 - agam;
-    c = 1.0 / FPMIN;
-    d = 1.0 / b;
-    h = d;
-    for (i = 1; i <= ITMAX; i++)
-    {
-        an = -i * (i - agam);
+    double an,b,c,d,del,h;
+    *gln=gammln(a);
+    b=x+1.0-a; /*Set up for evaluating continued fraction by modified Lentz’s method (§5.2) with b0 = 0.*/
+    c=1.0/FPMIN;
+    d=1.0/b;
+    h=d;
+    for (i=1;i<=ITMAX;i++) 
+    {//Iterate to convergence.
+        an = -i*(i-a);
         b += 2.0;
-        d = an * d + b;
-        if (fabs(d) < FPMIN)
-            d = FPMIN;
-        c = b + an / c;
-        if (fabs(c) < FPMIN)
-            c = FPMIN;
-        d = 1.0 / d;
-        del = d * c;
-        h *= del;
-        if (fabs(del - 1.0) < eps)
-            break;
+        d=an*d+b;
+        if (fabs(d) < FPMIN) d=FPMIN;
+            c=b+an/c;
+        if (fabs(c) < FPMIN) c=FPMIN;
+            d=1.0/d;
+            del=d*c;
+            h *= del;
+        if (fabs(del-1.0) < EPS) break;
     }
-    *gammcf = exp(-xgam + agam * log(xgam) - (*gln)) * h;
+    if (i > ITMAX) nrerror("a too large, ITMAX too small in gcf");
+        *gammcf=exp(-x+a*log(x)-(*gln))*h; //Put factors in front.
 }
 
-void gser(double *gamser, double agam, double xgam,
-          double *gln)
-{ // Function used in the calculation of incomplete gamma function
-    int n;
-    double sum, del, ap;
+// void gser(double *gamser, double agam, double xgam,
+//           double *gln)
+// { // Function used in the calculation of incomplete gamma function
+//     int n;
+//     double sum, del, ap;
 
-    *gln = gammln(agam);
-    if (xgam <= 0.0)
-    {
-        if (xgam < 0.0)
-            ;
-        *gamser = 0.0;
+//     *gln = gammln(agam);
+//     if (xgam <= 0.0)
+//     {
+//         if (xgam < 0.0)
+//             ;
+//         *gamser = 0.0;
+//         return;
+//     }
+//     else
+//     {
+//         ap = agam;
+//         del = sum = 1.0 / agam;
+//         for (n = 1; n <= ITMAX; n++)
+//         {
+//             ++ap;
+//             del *= xgam / ap;
+//             sum += del;
+//             if (fabs(del) < fabs(sum) * eps)
+//             {
+//                 *gamser = sum * exp(-xgam + agam * log(xgam) - (*gln));
+//                 return;
+//             }
+//         }
+//         return;
+//     }
+// }
+void gser(double *gamser, double a, double x, double *gln)
+/*Returns the incomplete gamma function P(a, x) evaluated by its series representation as gamser.
+Also returns ln Γ(a) as gln.*/
+{
+    double gammln(double xx);
+    void nrerror(char error_text[]);
+    int n;
+    double sum,del,ap;
+    *gln=gammln(a);
+    if (x <= 0.0) {
+        if (x < 0.0) nrerror("x less than 0 in routine gser");
+        *gamser=0.0;
         return;
-    }
-    else
-    {
-        ap = agam;
-        del = sum = 1.0 / agam;
-        for (n = 1; n <= ITMAX; n++)
-        {
+    } else {
+        ap=a;
+        del=sum=1.0/a;
+        for (n=1;n<=ITMAX;n++) {
             ++ap;
-            del *= xgam / ap;
+            del *= x/ap;
             sum += del;
-            if (fabs(del) < fabs(sum) * eps)
+            if (fabs(del) < fabs(sum)*EPS) 
             {
-                *gamser = sum * exp(-xgam + agam * log(xgam) - (*gln));
+                *gamser=sum*exp(-x+a*log(x)-(*gln));
                 return;
             }
         }
+        nrerror("a too large, ITMAX too small in routine gser");
         return;
     }
 }
+// double gammp(double agam, double xgam)
+// {
+//     int n;
+//     if (agam < 0)
+//     {
+//         agam = -agam;
+//         if (n < 1)
+//         {
+//             printf("Valor negativo para a na função gammp!!! a= %le\n", -agam);
+//             n = 2;
+//         }
+//     }
+//     double gamser, gammcf, gln;
+//     if (xgam < (agam + 1.0))
+//     {
+//         gser(&gamser, agam, xgam, &gln);
+//         return gamser;
+//     }
+//     else
+//     {
+//         gcf(&gammcf, agam, xgam, &gln);
+//         return 1.0 - gammcf;
+//     }
+// }
 
-double gammp(double agam, double xgam)
+
+double gammp(double a, double x)
+//Returns the incomplete gamma function P(a, x).
 {
-    int n;
-    if (agam < 0)
-    {
-        agam = -agam;
-        if (n < 1)
-        {
-            printf("Valor negativo para a na função gammp!!! a= %le\n", -agam);
-            n = 2;
-        }
-    }
-    double gamser, gammcf, gln;
-    if (xgam < (agam + 1.0))
-    {
-        gser(&gamser, agam, xgam, &gln);
+    void gcf(double *gammcf, double a, double x, double *gln);
+    void gser(double *gamser, double a, double x, double *gln);
+    void nrerror(char error_text[]);
+    double gamser,gammcf,gln;
+    if (x < 0.0 || a <= 0.0) nrerror("Invalid arguments in routine gammp");
+    if (x < (a+1.0)) 
+    { //Use the series representation.
+        gser(&gamser,a,x,&gln);
         return gamser;
-    }
-    else
-    {
-        gcf(&gammcf, agam, xgam, &gln);
-        return 1.0 - gammcf;
+    } else { //Use the continued fraction representation
+        gcf(&gammcf,a,x,&gln);
+        return 1.0-gammcf; //and take its complement.
     }
 }
 
-double gammq(double agam, double xgam)
+double gammq(double a, double x)
+//Returns the incomplete gamma function Q(a, x) ≡ 1 − P(a, x).
 {
-    double gamser, gammcf, gln;
-    if (xgam < (agam + 1.0))
-    {
-        gser(&gamser, agam, xgam, &gln);
-        return 1.0 - gamser;
-    }
-    else
-    {
-        gcf(&gammcf, agam, xgam, &gln);
+    void gcf(double *gammcf, double a, double x, double *gln);
+    void gser(double *gamser, double a, double x, double *gln);
+    void nrerror(char error_text[]);
+    double gamser,gammcf,gln;
+    if (x < 0.0 || a <= 0.0) nrerror("Invalid arguments in routine gammq");
+    if (x < (a+1.0)) 
+    { //Use the series representation
+        gser(&gamser,a,x,&gln);
+        return 1.0-gamser; //and take its complement.
+    } else { //Use the continued fraction representation.
+        gcf(&gammcf,a,x,&gln);
         return gammcf;
     }
 }
 
-double gammln(double xxgam)
+double gammln(double xx)
+//Returns the value ln[Γ(xx)] for xx > 0.
 {
-    double x, y, tmp, ser;
-    static double cof[6] = {76.18009172947146, -86.50532032941677,
-                            24.01409824083091, -1.231739572450155,
-                            0.1208650973866179e-2, -0.5395239384953e-5};
+    /*Internal arithmetic will be done in double precision, a nicety that you can omit if five-figure
+    accuracy is good enough.*/
+    double x,y,tmp,ser;
+    static double cof[6]={76.18009172947146,-86.50532032941677,
+    24.01409824083091,-1.231739572450155,
+    0.1208650973866179e-2,-0.5395239384953e-5};
     int j;
-    y = x = xxgam;
-    tmp = x + 5.5;
-    tmp -= (x + 0.5) * log(tmp);
-    ser = 1.000000000190015;
-    for (j = 0; j <= 5; j++)
-        ser += cof[j] / ++y;
-    return -tmp + log(2.5066282746310005 * ser / x);
+    y=x=xx;
+    tmp=x+5.5;
+    tmp -= (x+0.5)*log(tmp);
+    ser=1.000000000190015;
+    for (j=0;j<=5;j++) ser += cof[j]/++y;
+    return -tmp+log(2.5066282746310005*ser/x);
 }
+// double gammln(double xxgam)
+// {
+//     double x, y, tmp, ser;
+//     static double cof[6] = {76.18009172947146, -86.50532032941677,
+//                             24.01409824083091, -1.231739572450155,
+//                             0.1208650973866179e-2, -0.5395239384953e-5};
+//     int j;
+//     y = x = xxgam;
+//     tmp = x + 5.5;
+//     tmp -= (x + 0.5) * log(tmp);
+//     ser = 1.000000000190015;
+//     for (j = 0; j <= 5; j++)
+//         ser += cof[j] / ++y;
+//     return -tmp + log(2.5066282746310005 * ser / x);
+// }
 
 /***********************************************************************************************/
 double thetae(double etemp)
@@ -282,51 +394,78 @@ double thetae(double etemp)
 }*/
 
 double f(double scale_height, double x, double edens, double etemp, double mag_field)
-{
+{//All the function was checked step by step, seems to be working good.
     if (thetae(etemp) < 0.03)
-    {
-        return pow(C_euler, 1.8899 * pow(x, 1. / 3.)) -
-               2.49 * pow(10., -10.) * 12. * C_pi * edens * scale_height / (mag_field) * 1./ (2. * pow(thetae(etemp), 5.)) *
-                   (1 / pow(x, 7. / 6.) + 0.4 / pow(x, 17. / 12.) + 0.5316 / pow(x, 5. / 3.));
+    { 
+        double pre_factor = 2.49 * pow(10., -10.) * 12. * C_PI * edens * scale_height / (mag_field) * 1 /(2 * pow(thetae(etemp), 5.)); 
+        //printf("Prefactor1 = %le \n", pre_factor);
+        return exp(1.8899 * pow(x, 1. / 3.)) - pre_factor * (1 / pow(x, 7. / 6.) + 0.4 / pow(x, 17. / 12.) + 0.5316 / pow(x, 5. / 3.));
     }
     else
     {
-        return pow(C_euler, 1.8899 * pow(x, 1. / 3.)) - 2.49 * pow(10., -10.) * 12. * C_pi * edens * scale_height / (mag_field) * 1 /
-                                                            (pow(thetae(etemp), 3.) * bessk2(1 / thetae(etemp))) *
-                                                            (1. / pow(x, 7. / 6.) + 0.4 / pow(x, 17. / 12.) +
-                                                             0.5316 / pow(x, 5. / 3.));
+        double pre_factor = 2.49 * pow(10., -10.) * 12. * C_PI * edens * scale_height / (mag_field) * 1 /(bessk2(1. / thetae(etemp)) * pow(thetae(etemp), 3.));
+        //printf("Prefactor2 = %le \n", pre_factor);
+        return exp( 1.8899 * pow(x, 1. / 3.)) - pre_factor * (1. / pow(x, 7. / 6.) + 0.4 / pow(x, 17. / 12.) + 0.5316 / pow(x, 5. / 3.));
     }
 }
 
-/*Function that returns the root from Secant Method*/
-double secant(double scale_height, double edens, double etemp, double mag_field)
-{
-    int iter = 1;
-    double x1 = 1.;
-    double x2 = 20000.;
-    double x3;
-    do
-    {
-        x3 = (x1 * f(scale_height, x2, edens, etemp, mag_field) - x2 * f(scale_height, x1, edens, etemp, mag_field)) / (f(scale_height, x2, edens, etemp, mag_field) - f(scale_height, x1, edens, etemp, mag_field));
-        if (isnan(x3) || isinf(x3))
-        {
-            x1 = x2;
-            break;
+double secant_bounded(double (*func)(double, double, double, double, double), double scale_height, double edens, double etemp, double mag_field)
+//Using the secant method, find the root of a function func thought to lie between x1 and x2.
+//The root, returned as rtsec, is refined until its accuracy is ±xacc.
+{//All the function was checked step by step, seems to be working good.
+    void nrerror(char error_text[]);
+    int j;
+    double xacc = 1e-6;
+    double x1 = 10;
+    double x2 = 20;
+    double fl,f,dx,swap,xl,rts;
+    int interval = 1;
+    fl=(*func)(scale_height, x1, edens, etemp, mag_field);
+    f=(*func)(scale_height, x2, edens, etemp, mag_field);
+    while(interval){
+        if (f * fl > 0){
+            x1 = x1/2;
+            x2 = x2*2;
+            //printf("x1 = %le, x2 = %le \n", x1, x2);
         }
-        x1 = x2;
-        x2 = x3;
-        iter++;
-        // printf("x3 = %lf\n", x3);
-        // printf("x1 = %lf\n", x1);
-    } while (fabs(f(scale_height, x3, edens, etemp, mag_field)) > eps && iter <= maxSteps);
-    return x1;
+        else{
+            interval = 0;
+            //printf("Finally x1 = %le, x2 = %le \n", x1, x2);
+        }
+        fl=(*func)(scale_height, x1, edens, etemp, mag_field);
+        f=(*func)(scale_height, x2, edens, etemp, mag_field);
+        //printf("fl = %le, f = %le\n", fl, f);
+    }
+    if (fabs(fl) < fabs(f)) { //Pick the bound with the smaller function value as
+        rts=x1; //the most recent guess.
+        xl=x2;
+        swap=fl;
+        fl=f;
+        f=swap;
+    } else {
+        xl=x1;
+        rts=x2;
+    }
+    for (j=1;j<=ITMAX;j++) { //Secant loop.
+        dx=(xl-rts)*f/(f-fl); //Increment with respect to latest value.
+        xl=rts;
+        fl=f;
+        rts += dx;
+        f=(*func)(scale_height, rts, edens, etemp, mag_field);
+        //printf("rts = %le \n", rts);
+        if (fabs(dx) < xacc || f == 0.0) return rts; //Convergence.
+    }
+    nrerror("Maximum number of iterations exceeded in rtsec");
+    return 0.0; //Never get here.
 }
 
+
+
+
 double bremmstrahlung_ee(double edens, double etemp)
-{
-    double th_e = thetae(etemp);
+{//All the function was checked step by step, seems to be working good.
     double result;
-    if (th_e < 1)
+    if (thetae(etemp) < 1)
     {
         result = 2.56 * pow(10., -22.) * pow(edens, 2.) * pow(thetae(etemp), 3. / 2.) *
                  (1 + 1.10 * thetae(etemp) + pow(thetae(etemp), 2.) - 1.25 * pow(thetae(etemp), 5. / 2.));
@@ -339,180 +478,502 @@ double bremmstrahlung_ee(double edens, double etemp)
 }
 
 double bremmstrahlung_ei(double edens, double etemp)
-{
-    double th_e = thetae(etemp);
+{//All the function was checked step by step, seems to be working good.
     double result;
-    if (th_e >= 1)
-    {
-        result = 1.48 * pow(10., -22.) * pow(edens, 2.) * (9. * thetae(etemp)) / (2. * C_pi) *
+    if (thetae(etemp) >= 1)
+    { // functioning
+        result = 1.48 * pow(10., -22.) * pow(edens, 2.) * (9. * thetae(etemp)) / (2. * C_PI) *
                  (log(1.123 * thetae(etemp) + 0.48) + 1.5);
     }
     else
-    {
-        result = 1.48 * pow(10., -22.) * pow(edens, 2.) * 4. * pow((2 * thetae(etemp) / pow(C_pi, 3.)), 1. / 2.) *
+    {   //functioning
+        result = 1.48 * pow(10., -22.) * pow(edens, 2.) * 4. * pow((2 * thetae(etemp) / pow(C_PI, 3.)), 1. / 2.) *
                  (1. + 1.781 * pow(thetae(etemp), 1.34));
     }
     return result;
 }
 
 double bremmscooling_rate(double edens, double etemp)
-{
+{//All the function was checked step by step, seems to be working good.
+
     double result = bremmstrahlung_ee(edens, etemp) + bremmstrahlung_ei(edens, etemp);
     return result;
 }
 
 double crit_freq(double scale_height, double edens, double etemp, double mag_field)
-{
-    return (1.5) * (2.80 * pow(10.,6.) * mag_field) * pow(thetae(etemp), 2.) * secant(scale_height, edens, etemp, mag_field);
+{//All the function was checked step by step, seems to be working good.
+    return (1.5) * (2.80 * pow(10.,6.) * mag_field) * pow(thetae(etemp), 2.) * secant_bounded(f,scale_height, edens, etemp, mag_field);
 }
 
 /*Synchtron radiation calculation*/
 double rsync(double scale_height, double edens, double etemp, double mag_field)
-{
+{ //All the function was checked step by step, seems to be working good.
     double nuzero = 2.80 * pow(10., 6.) * mag_field;
+    //correcto
     double a1 = 2. / (3. * nuzero * pow(thetae(etemp), 2.));
     double a2 = 0.4 / pow(a1, 1. / 4.);
     double a3 = 0.5316 / pow(a1, 1. / 2.);
     double a4 = 1.8899 * pow(a1, 1. / 3.);
     if (thetae(etemp) > 0.03)
     {
-        double result = 2. * C_pi * BOLTZ_CGS * etemp * pow(crit_freq(scale_height, edens, etemp, mag_field), 3.) / (3. * scale_height * pow(C_CGS, 2.));
-        double result2 =6.76 * pow(10., -28.) * edens / (bessk2(1. / thetae(etemp)) * pow(a1, 1. / 6.));
-        result2 = result2 * (1. / pow(a4, 11. / 2.) * gammq(11. / 2., a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.)) +
-                 a2 / pow(a4, 19. / 4.) * gammq(19. / 4., a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.)) + a3 / pow(a4, 4.) * (pow(a4, 3.) * crit_freq(scale_height, edens, etemp, mag_field) + 3. * pow(a4, 2.) * pow(crit_freq(scale_height, edens, etemp, mag_field), 2. / 3.) + 6. * a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.) + 6.) * pow(C_euler, -a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.)));
-        result = result + result2;
+        double self_abs = 2. * C_PI * BOLTZ_CGS * etemp * pow(crit_freq(scale_height, edens, etemp, mag_field), 3.) / (3. * scale_height * pow(C_CGS, 2.));
+        double init_term2 =6.76 * pow(10., -28.) * edens / (bessk2(1. / thetae(etemp)) * pow(a1, 1. / 6.));
+        double syn_1 = 1. / pow(a4, 11. / 2.) *(exp(gammln(11./2.)))* gammq(11. / 2., a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.));
+        double syn_2 = a2 / pow(a4, 19. / 4.) *(exp(gammln(19./4.)))* gammq(19. / 4., a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.));
+        double syn_3 = a3 / pow(a4, 4.) * (pow(a4, 3.) * crit_freq(scale_height, edens, etemp, mag_field) + 3. * pow(a4, 2.) * pow(crit_freq(scale_height, edens, etemp, mag_field), 2. / 3.) + 6. * a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.) + 6.) * exp(-a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.));
+        double synchrotron = init_term2 * (syn_1+syn_2+syn_3);
+        double result = self_abs + synchrotron;
+        
         return result;
     }
     else
     {
-        double result = 2. * C_pi * BOLTZ_CGS * etemp * pow(crit_freq(scale_height, edens, etemp, mag_field), 3.) / (3. * scale_height * pow(C_CGS, 2.));
-        double result2 = 6.76 * pow(10., -28.) * edens / (2. * pow(thetae(etemp), 2.) * pow(a1, 1. / 6.));
-        result2 = result2 * (1. / pow(a4, 11. / 2.) * gammq(11. / 2., a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.)) +
-                 a2 / pow(a4, 19. / 4.) * gammq(19. / 4., a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.)) + a3 / pow(a4, 4.) * (pow(a4, 3.) * crit_freq(scale_height, edens, etemp, mag_field) + 3. * pow(a4, 2.) * pow(crit_freq(scale_height, edens, etemp, mag_field), 2. / 3.) + 6. * a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.) + 6.) * pow(C_euler, -a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.)));
-        result = result + result2;
+        double self_abs = 2. * C_PI * BOLTZ_CGS * etemp * pow(crit_freq(scale_height, edens, etemp, mag_field), 3.) / (3. * scale_height * pow(C_CGS, 2.));
+        double init_term2 = 6.76 * pow(10., -28.) * edens / (2. * pow(thetae(etemp), 2.) * pow(a1, 1. / 6.));
+        double syn_1 = 1. / pow(a4, 11. / 2.) *(exp(gammln(11./2.)))* gammq(11. / 2., a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.));
+        double syn_2 = a2 / pow(a4, 19. / 4.) *(exp(gammln(19./4.)))* gammq(19. / 4., a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.));
+        double syn_3 = a3 / pow(a4, 4.) * (pow(a4, 3.) * crit_freq(scale_height, edens, etemp, mag_field) + 3. * pow(a4, 2.) * pow(crit_freq(scale_height, edens, etemp, mag_field), 2. / 3.) + 6. * a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.) + 6.) * exp(-a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.));
+        double synchrotron = init_term2 * (syn_1+syn_2+syn_3);
+        double result = self_abs + synchrotron;
         return result;
     }
 }
 
-double comptonization_factor (double scale_height, double edens, double etemp, double mag_field){
-	double thompson_opticaldepth = 2. * edens * THOMSON_CGS * etemp;
-	double Afactor = 1. + 4. * thetae(etemp) + 16. * pow(thetae(etemp), 2.);
-	double maxfactor = 3 * BOLTZ_CGS * etemp/(PLANCK_CGS * crit_freq(scale_height, edens, etemp, mag_field));
-	double jm = log(maxfactor)/log(Afactor);
-	double s = thompson_opticaldepth + pow(thompson_opticaldepth, 2.);
-	// printf("O valor de thompson optical depth é%le\n", thompson_opticaldepth);
-	// printf("O valor de Afactor é%le\n", Afactor);
-	// printf("O valor de maxfactor é%le\n", maxfactor);
-    // printf("O valor da critfreq é%le\n", crit_freq(scale_height, edens, etemp, mag_field));
-	// printf("O valor de jm é%le\n", jm);
-	// printf("O valor de s é%le\n", s);
-	// printf("O valor de gammp(As) é%le\n", gammp(jm - 1, Afactor * s));
-	// printf("O valor de gammp(s) é%le\n", gammp(jm +1, s));
-
-	double result = pow(C_euler, s*(Afactor -1.))*(1. - gammp(jm - 1., Afactor * s)) + maxfactor * gammp(jm +1., s);
-	if (isnan(result)){
-	result = maxfactor * gammp(jm +1., s);
-}
-	/*printf("O valor de resultado é%le\n", result);*/
-
-	return result;
-
-}
 
 /*scattering optical depth*/
 
 double soptical_depth(double scale_height, double edens, double etemp)
-{
+{//All the function was checked step by step, seems to be working good.
     double result = 2. * edens * THOMSON_CGS * scale_height;
     return result;
 }
 
-// double comptonization_factor_artur(double edens, double etemp, double mag_field)
-// {
-//     double prob = 1 - pow(C_euler, -soptical_depth(edens, etemp));
-//     double A = 1 + 4 * thetae(etemp) + 16 * pow(thetae(etemp), 2.);
-//     double result = 1 + prob * (A - 1) / (1 - prob * A) * (1 - pow((PLANCK_CGS * crit_freq(scale_height, edens, etemp, mag_field) / (3 * thetae(etemp) * ERM_CGS * pow(C_CGS, 2.))), -1 - log(prob) / log(A)));
-//     return result;
-// }
+double comptonization_factor_ny(double scale_height, double edens, double etemp, double mag_field)
+{//All the function was checked step by step, seems to be working good.
+    double prob = 1 - exp(-soptical_depth(scale_height, edens, etemp));
+    double A = 1 + 4 * thetae(etemp) + 16 * pow(thetae(etemp), 2.);
+    double eta1 = prob * (A - 1) / (1 - prob * A);
+    double eta2 = PLANCK_CGS * crit_freq(scale_height, edens, etemp, mag_field)/(3 * thetae(etemp) * ERM_CGS * pow(C_CGS,2.));
+    double eta3 = -1 - log(prob)/log(A);
+    double result = 1 + eta1* (1 - pow(eta2, eta3));
+    if (eta2 > 1){
+        printf("Compton formula not valid, exiting...");
+        exit(1);
+    }
+    return result;
+}
 
 double totalthincooling_rate(double scale_height, double edens, double etemp, double mag_field)
-{
-    double result =
-        bremmstrahlung_ee(edens, etemp) + bremmstrahlung_ei(edens, etemp) + rsync(scale_height, edens, etemp, mag_field) * comptonization_factor(scale_height, edens, etemp, mag_field);
+{//All the function was checked step by step, seems to be working good.
+    double result = bremmscooling_rate(edens, etemp) + rsync(scale_height, edens, etemp, mag_field) * comptonization_factor_ny(scale_height, edens, etemp, mag_field);
     return result;
 }
 
 /*Absorption optical depth*/
 double absoptical_depth(double scale_height, double edens, double etemp, double mag_field)
-{
+{//All the function was checked step by step, seems to be working good.
     double result = 1. / (4. * C_sigma * pow(etemp, 4.)) * scale_height * totalthincooling_rate(scale_height, edens, etemp, mag_field);
     return result;
 }
 
 /*Total optical depth*/
 double total_optical_depth(double scale_height, double edens, double etemp, double mag_field)
-{
+{//All the function was checked step by step, seems to be working good.
     double result = soptical_depth(scale_height, edens, etemp) + absoptical_depth(scale_height, edens, etemp, mag_field);
     return result;
 }
 
 /*Total cooling with thin and thick disk*/
 double total_cooling(double scale_height, double edens, double etemp, double mag_field)
-{
+{//All the function was checked step by step, seems to be working good.
     return 4. * C_sigma * pow(etemp, 4.) / scale_height * 1 /
            (3 * total_optical_depth(scale_height, edens, etemp, mag_field) / 2. + pow(3., 1. / 2.) + 1. / absoptical_depth(scale_height, edens, etemp, mag_field));
 }
 
+double bbody(double scale_height, double edens, double etemp, double mag_field)
+{//All the function was checked step by step, seems to be working good.
+    return 8. * C_sigma * pow(etemp, 4.) / (3 * scale_height * total_optical_depth(scale_height, edens, etemp, mag_field));
+}
+
 int main()
 {
-
     double H;
     double ne;
     double te;
     double B;
+    #if(BREMSTRAHLUNGTEST)
+    FILE *file_height;
+    file_height = fopen("scale_height.txt", "r");
+    FILE *file_e_density;
+    file_e_density = fopen("ne.txt", "r");
+    FILE *file_temperature;
+    file_temperature = fopen("te.txt", "r");
+    FILE *file_mag_field;
+    file_mag_field = fopen("mag.txt", "r");
+    FILE *file_result;
+    file_result = fopen("brems_table.txt", "w");
 
-    // float loop = 100;
-    // char str[1];
-    // while (loop > 1)
-    // {
-    //     printf("valor do scale_height\n");
-    //     scanf("%le", &H);
-    //     H = pow(10, H);
-    //     printf ("valor do B\n");
-    //     scanf("%le", &B);
-    //     B = pow(10, B);
-    //     printf("Valor de edens\n");
-    //     scanf("%le", &ne);
-    //     ne = pow(10, ne);
-    //     printf ("valor de etemp\n");
-    //     scanf("%le", &te);
-    //     te= pow(10, te);
-    //     printf("H = %le, ne = %le, Te = %le, B = %le\n", H, ne, te, B);
-    //     printf("\nOne of the roots is: %lf\n",secant(H, ne, te, B));
-    //     printf("o valor do thetae é:%le\n", thetae(te));
-    //     //printf("o valor do H_aqui é:%le\n", H);
-    //     //printf("o valor do H é:%le\n", scale_height(H, ne, te));
-    //     printf("O valor do bremmstrahlung ee é:%le\n", bremmstrahlung_ee(ne, te));
-    //     printf("O valor do bremmstrahlung ei é:%le\n", bremmstrahlung_ei(ne, te));
-    //     printf("O valor do bremmstrahlung total é:%le\n", bremmscooling_rate(ne, te));
-    //     printf("o valor da freq crit é: %le\n", crit_freq(H, ne, te, B));
-    //     printf("o valor do rsync é: %le\n", rsync(H, ne, te, B));
-    //     printf("o valor do comptonization factor é: %le\n", comptonization_factor(H, ne, te, B));
-    //     printf("o valor do cooling total no disco fino é:%le\n", totalthincooling_rate(H, ne, te, B));
-    //     printf("O valor do tau_scat é:%le\n", soptical_depth(H, ne, te));
-    //     printf("O valor do tau_abs é:%le\n", absoptical_depth(H, ne, te, B));
-    //     printf("O valor do tau_total é:%le\n", total_optical_depth(H, ne, te, B));
-    //     printf("o valor do cooling total é:%le\n", total_cooling(H, ne, te, B));
-    //     printf("o valor do cooling total em log:%le\n", log10(total_cooling(H, ne, te, B)));
-    //     sleep(1);
-    //     printf("Do you want to read other values? y/n\n");
-    //     scanf("%s", str);
-    //     if (strcmp(str, "n") == 0)
-    //     {
-    //         loop = 0;
-    //     }
-    // }
-    
+    double cooling;
+
+    if (file_e_density == NULL || file_temperature == NULL || file_mag_field == NULL || file_height == NULL)
+    {
+        printf("Error Reading File\n");
+        exit(0);
+    }
+
+    fprintf(file_result, "scale_height, mag_field, e_density, temperature, bremscool\n");
+    // run for logarithm values
+    while (fscanf(file_height, "%lf", &H) == 1){
+        rewind(file_mag_field);
+        while (fscanf(file_mag_field, "%lf,", &B) == 1)
+        {
+            rewind(file_e_density);
+            while (fscanf(file_e_density, "%lf,", &ne) == 1)
+            {
+                rewind(file_temperature);
+                while (fscanf(file_temperature, "%lf,", &te) == 1)
+                {
+                        fprintf(file_result, "%.2f, %.2f, %.2f, %.2f,", H, B, ne, te);
+                        H = pow(10., H);
+                        ne = pow(10., ne);
+                        te = pow(10., te);
+                        B = pow(10., B);
+                        cooling = log10(bremmscooling_rate(ne, te));
+                        H = log10(H);
+                        ne = log10(ne);
+                        te = log10(te);
+                        B = log10(B);
+                        fprintf(file_result, "%.8e\n", cooling);
+                }
+            }
+        }
+    }
+    fclose(file_height);
+    fclose(file_e_density);
+    fclose(file_temperature);
+    fclose(file_result);
+    fclose(file_mag_field);
+
+    return 0;
+    #elif(SYNCHROTRONTEST)
+
+    FILE *file_height;
+    file_height = fopen("scale_height.txt", "r");
+    FILE *file_e_density;
+    file_e_density = fopen("ne.txt", "r");
+    FILE *file_temperature;
+    file_temperature = fopen("te.txt", "r");
+    FILE *file_mag_field;
+    file_mag_field = fopen("mag.txt", "r");
+    FILE *file_result;
+    file_result = fopen("synch_table.txt", "w");
+
+    double cooling;
+
+    if (file_e_density == NULL || file_temperature == NULL || file_mag_field == NULL || file_height == NULL)
+    {
+        printf("Error Reading File\n");
+        exit(0);
+    }
+
+    fprintf(file_result, "scale_height, mag_field, e_density, temperature, synchcool\n");
+    // run for logarithm values
+    while (fscanf(file_height, "%lf", &H) == 1){
+        rewind(file_mag_field);
+        while (fscanf(file_mag_field, "%lf,", &B) == 1)
+        {
+            rewind(file_e_density);
+            while (fscanf(file_e_density, "%lf,", &ne) == 1)
+            {
+                rewind(file_temperature);
+                while (fscanf(file_temperature, "%lf,", &te) == 1)
+                {
+                        fprintf(file_result, "%.2f, %.2f, %.2f, %.2f,", H, B, ne, te);
+                        H = pow(10., H);
+                        ne = pow(10., ne);
+                        te = pow(10., te);
+                        B = pow(10., B);
+                        cooling = log10(rsync(H, ne, te, B));
+                        H = log10(H);
+                        ne = log10(ne);
+                        te = log10(te);
+                        B = log10(B);
+                        fprintf(file_result, "%.8e\n", cooling);
+                }
+            }
+        }
+    }
+    fclose(file_height);
+    fclose(file_e_density);
+    fclose(file_temperature);
+    fclose(file_result);
+    fclose(file_mag_field);
+
+    return 0;
+
+    #elif(C_SYNCHROTRONTEST)
+
+    FILE *file_height;
+    file_height = fopen("scale_height.txt", "r");
+    FILE *file_e_density;
+    file_e_density = fopen("ne.txt", "r");
+    FILE *file_temperature;
+    file_temperature = fopen("te.txt", "r");
+    FILE *file_mag_field;
+    file_mag_field = fopen("mag.txt", "r");
+    FILE *file_result;
+    file_result = fopen("C_synch_table.txt", "w");
+
+    double cooling;
+
+    if (file_e_density == NULL || file_temperature == NULL || file_mag_field == NULL || file_height == NULL)
+    {
+        printf("Error Reading File\n");
+        exit(0);
+    }
+
+    fprintf(file_result, "scale_height, mag_field, e_density, temperature, C_synchcool\n");
+    // run for logarithm values
+    while (fscanf(file_height, "%lf", &H) == 1){
+        rewind(file_mag_field);
+        while (fscanf(file_mag_field, "%lf,", &B) == 1)
+        {
+            rewind(file_e_density);
+            while (fscanf(file_e_density, "%lf,", &ne) == 1)
+            {
+                rewind(file_temperature);
+                while (fscanf(file_temperature, "%lf,", &te) == 1)
+                {
+                        fprintf(file_result, "%.2f, %.2f, %.2f, %.2f,", H, B, ne, te);
+                        H = pow(10., H);
+                        ne = pow(10., ne);
+                        te = pow(10., te);
+                        B = pow(10., B);
+                        cooling = log10(rsync(H, ne, te, B) * comptonization_factor_ny(H, ne, te, B));
+                        H = log10(H);
+                        ne = log10(ne);
+                        te = log10(te);
+                        B = log10(B);
+                        fprintf(file_result, "%.8e\n", cooling);
+                }
+            }
+        }
+    }
+    fclose(file_height);
+    fclose(file_e_density);
+    fclose(file_temperature);
+    fclose(file_result);
+    fclose(file_mag_field);
+
+    return 0;
+    #elif(COMPTONTEST)
+
+    FILE *file_height;
+    file_height = fopen("scale_height.txt", "r");
+    FILE *file_e_density;
+    file_e_density = fopen("ne.txt", "r");
+    FILE *file_temperature;
+    file_temperature = fopen("te.txt", "r");
+    FILE *file_mag_field;
+    file_mag_field = fopen("mag.txt", "r");
+    FILE *file_result;
+    file_result = fopen("compton_table.txt", "w");
+
+    double cooling;
+
+    if (file_e_density == NULL || file_temperature == NULL || file_mag_field == NULL || file_height == NULL)
+    {
+        printf("Error Reading File\n");
+        exit(0);
+    }
+
+    fprintf(file_result, "scale_height, mag_field, e_density, temperature, compton_cool\n");
+    // run for logarithm values
+    while (fscanf(file_height, "%lf", &H) == 1){
+        rewind(file_mag_field);
+        while (fscanf(file_mag_field, "%lf,", &B) == 1)
+        {
+            rewind(file_e_density);
+            while (fscanf(file_e_density, "%lf,", &ne) == 1)
+            {
+                rewind(file_temperature);
+                while (fscanf(file_temperature, "%lf,", &te) == 1)
+                {
+                        fprintf(file_result, "%.2f, %.2f, %.2f, %.2f,", H, B, ne, te);
+                        H = pow(10., H);
+                        ne = pow(10., ne);
+                        te = pow(10., te);
+                        B = pow(10., B);
+                        cooling = log10(comptonization_factor_ny(H, ne, te, B));
+                        H = log10(H);
+                        ne = log10(ne);
+                        te = log10(te);
+                        B = log10(B);
+                        fprintf(file_result, "%.8e\n", cooling);
+                }
+            }
+        }
+    }
+    fclose(file_height);
+    fclose(file_e_density);
+    fclose(file_temperature);
+    fclose(file_result);
+    fclose(file_mag_field);
+
+    return 0;
+    #elif(BLACKBODYTEST)
+
+    FILE *file_height;
+    file_height = fopen("scale_height.txt", "r");
+    FILE *file_e_density;
+    file_e_density = fopen("ne.txt", "r");
+    FILE *file_temperature;
+    file_temperature = fopen("te.txt", "r");
+    FILE *file_mag_field;
+    file_mag_field = fopen("mag.txt", "r");
+    FILE *file_result;
+    file_result = fopen("bbody_table.txt", "w");
+
+    double cooling;
+
+    if (file_e_density == NULL || file_temperature == NULL || file_mag_field == NULL || file_height == NULL)
+    {
+        printf("Error Reading File\n");
+        exit(0);
+    }
+
+    fprintf(file_result, "scale_height, mag_field, e_density, temperature, blackbody_cool\n");
+    // run for logarithm values
+    while (fscanf(file_height, "%lf", &H) == 1){
+        rewind(file_mag_field);
+        while (fscanf(file_mag_field, "%lf,", &B) == 1)
+        {
+            rewind(file_e_density);
+            while (fscanf(file_e_density, "%lf,", &ne) == 1)
+            {
+                rewind(file_temperature);
+                while (fscanf(file_temperature, "%lf,", &te) == 1)
+                {
+                        fprintf(file_result, "%.2f, %.2f, %.2f, %.2f,", H, B, ne, te);
+                        H = pow(10., H);
+                        ne = pow(10., ne);
+                        te = pow(10., te);
+                        B = pow(10., B);
+                        cooling = log10(bbody(H, ne, te, B));
+                        H = log10(H);
+                        ne = log10(ne);
+                        te = log10(te);
+                        B = log10(B);
+                        fprintf(file_result, "%.8e\n", cooling);
+                }
+            }
+        }
+    }
+    fclose(file_height);
+    fclose(file_e_density);
+    fclose(file_temperature);
+    fclose(file_result);
+    fclose(file_mag_field);
+
+    return 0;
+    #elif(ABSORPTIONDEPTHTEST)
+
+    FILE *file_height;
+    file_height = fopen("scale_height.txt", "r");
+    FILE *file_e_density;
+    file_e_density = fopen("ne.txt", "r");
+    FILE *file_temperature;
+    file_temperature = fopen("te.txt", "r");
+    FILE *file_mag_field;
+    file_mag_field = fopen("mag.txt", "r");
+    FILE *file_result;
+    file_result = fopen("tau_table.txt", "w");
+
+    double cooling;
+
+    if (file_e_density == NULL || file_temperature == NULL || file_mag_field == NULL || file_height == NULL)
+    {
+        printf("Error Reading File\n");
+        exit(0);
+    }
+
+    fprintf(file_result, "scale_height, mag_field, e_density, temperature, abstau\n");
+    // run for logarithm values
+    while (fscanf(file_height, "%lf", &H) == 1){
+        rewind(file_mag_field);
+        while (fscanf(file_mag_field, "%lf,", &B) == 1)
+        {
+            rewind(file_e_density);
+            while (fscanf(file_e_density, "%lf,", &ne) == 1)
+            {
+                rewind(file_temperature);
+                while (fscanf(file_temperature, "%lf,", &te) == 1)
+                {
+                        fprintf(file_result, "%.2f, %.2f, %.2f, %.2f,", H, B, ne, te);
+                        H = pow(10., H);
+                        ne = pow(10., ne);
+                        te = pow(10., te);
+                        B = pow(10., B);
+                        cooling = log10(absoptical_depth(H, ne, te, B));
+                        H = log10(H);
+                        ne = log10(ne);
+                        te = log10(te);
+                        B = log10(B);
+                        fprintf(file_result, "%.8e\n", cooling);
+                }
+            }
+        }
+    }
+    fclose(file_height);
+    fclose(file_e_density);
+    fclose(file_temperature);
+    fclose(file_result);
+    fclose(file_mag_field);
+
+    return 0;
+    #elif(SINGLE_VALUE)
+    double loop = 100;
+    char str[1];
+    while (loop > 1)
+    {
+        printf("valor do scale_height\n");
+        scanf("%le", &H);
+        H = pow(10, H);
+        printf ("valor do B\n");
+        scanf("%le", &B);
+        B = pow(10, B);
+        printf("Valor de edens\n");
+        scanf("%le", &ne);
+        ne = pow(10, ne);
+        printf ("valor de etemp\n");
+        scanf("%le", &te);
+        te= pow(10, te);
+        printf("H = %le, ne = %le, Te = %le, B = %le\n", H, ne, te, B);
+        printf("\nOne of the roots is: %lf\n",secant_bounded(f, H, ne, te, B));
+        printf("o valor do thetae =:%.11e\n", thetae(te));
+        //printf("o valor do H_aqui =:%le\n", H);
+        //printf("o valor do H =:%le\n", scale_height(H, ne, te));
+        printf("O valor do bremmstrahlung ee =:%le\n", bremmstrahlung_ee(ne, te));
+        printf("O valor do bremmstrahlung ei =:%le\n", bremmstrahlung_ei(ne, te));
+        printf("O valor do bremmstrahlung total =:%le\n", bremmscooling_rate(ne, te));
+        printf("o valor da freq crit =: %.11e\n", crit_freq(H, ne, te, B));
+        printf("o valor do rsync =: %le\n", rsync(H, ne, te, B));
+        printf("o valor do comptonization factor =: %.11e\n", comptonization_factor_ny(H, ne, te, B));
+        printf("o valor do cooling total no disco fino =:%le\n", totalthincooling_rate(H, ne, te, B));
+        printf("O valor do tau_scat =:%le\n", soptical_depth(H, ne, te));
+        printf("O valor do tau_abs =:%le\n", absoptical_depth(H, ne, te, B));
+        printf("O valor do tau_total =:%le\n", total_optical_depth(H, ne, te, B));
+        printf("o valor do cooling total =:%le\n", total_cooling(H, ne, te, B));
+        printf("o valor do blackbody =:%le\n", bbody(H, ne, te, B));
+        printf("o valor do cooling total em log:%le\n", log10(total_cooling(H, ne, te, B)));
+        printf("Do you want to read other values? y/n\n");
+        scanf("%s", str);
+        if (strcmp(str, "n") == 0)
+        {
+            loop = 0;
+        }
+    }
+    #else
     FILE *file_height;
     file_height = fopen("scale_height.txt", "r");
     FILE *file_e_density;
@@ -524,7 +985,7 @@ int main()
     FILE *file_result;
     file_result = fopen("cooling_table.txt", "w");
 
-    float cooling;
+    double cooling;
 
     if (file_e_density == NULL || file_temperature == NULL || file_mag_field == NULL)
     {
@@ -554,7 +1015,7 @@ int main()
                         ne = log10(ne);
                         te = log10(te);
                         B = log10(B);
-                        fprintf(file_result, "%.2f\n", cooling);
+                        fprintf(file_result, "%.8e\n", cooling);
                 }
             }
         }
@@ -566,4 +1027,5 @@ int main()
     fclose(file_mag_field);
 
     return 0;
+    #endif
 }

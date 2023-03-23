@@ -20,7 +20,7 @@
 #define C_Mbh (10. * C_Msun)
 #define C_GM (C_Mbh * C_G)
 
-
+#define TEST (1)
 #define ITMAX (100)     /* Used in calculating gamma function*/
 #define eps (3e-7)
 #define maxSteps (1e3)
@@ -214,7 +214,49 @@ double coulomb_heating(double etemp, double itemp, double edens)
 
 
 int main()
-{
+{  
+    #if(TEST)
+        FILE *file_evolution;
+        file_evolution = fopen("evolution.txt", "w");
+        FILE *file_time;
+        file_time = fopen("time.txt", "w");
+
+        double ne = 3.1958972503683994e17;
+        double Te_new, Ti_new, Te_old = 662518140.0, Ti_old = 66251817000.0;
+        double coulomb_value;
+        double time_scale = C_G *C_Mbh/(pow(C_CGS, 3.));
+        int keep_iterating = 1;
+        double dt = 1.0579606673080375e-06;
+        int numberdts = 0;
+        //double C = MH_CGS * (5/3 - 1)/(BOLTZ_CGS * 5.347694869041443e-07);
+        double C = 0.0151109896223157932127392211709489511648382722709518807797282062;
+        //printf("Te_old = %lf \n", Te_old);
+        //printf("Ti_old = %lf \n", Ti_old);
+        //printf("C = %.100f \n", C);
+        fprintf(file_evolution, "%.2f \n", Ti_old/Te_old);
+        fprintf(file_time, "%.2f \n", 0);
+        while(keep_iterating){
+            coulomb_value = coulomb_heating(Te_old, Ti_old, ne);
+            //printf("coulomb_value = %lf \n", coulomb_value);
+            //printf("C = %lf\n", C);
+            Ti_new = Ti_old - C * coulomb_value * dt;
+            Te_new = Te_old + C * coulomb_value * dt;
+            Te_old = Te_new;
+            Ti_old = Ti_new;
+            if (Ti_new/Te_new - 1 < 0.2){
+                keep_iterating = 0;
+            }
+            numberdts = numberdts + 1;
+            fprintf(file_evolution, "%.5f \n", Ti_new/Te_new);
+            fprintf(file_time, "%.5f \n", numberdts * dt/(time_scale));
+            
+            //printf("Number of dts = %d \n", numberdts);
+            //printf("ratio = %lf \n", Ti_new/Te_new);
+        }
+        printf("Number of dts = %d \n", numberdts);
+        printf("Total time in RG/c = %lf \n", numberdts * dt/(time_scale));
+
+    #else
     FILE *file_e_density;
     file_e_density = fopen("ne.txt", "r");
     FILE *file_temperature;
@@ -259,4 +301,5 @@ int main()
     fclose(file_result);
 
     return 0;
+    #endif
 }

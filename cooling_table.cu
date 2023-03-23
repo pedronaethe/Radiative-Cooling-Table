@@ -39,7 +39,7 @@ void Load_Cooling_Tables(float *cooling_table)
     bmag_arr = (double *)malloc(nw * nx * ny * nz * sizeof(double));
 
     // Reading the cooling table
-    infile = fopen("cooling_table.txt", "r");
+    infile = fopen("tau_table.txt", "r");
 
     if (infile == NULL)
     {
@@ -146,9 +146,9 @@ __global__ void cooling_function(cudaTextureObject_t my_tex, float a0, float a1,
     const int nx = 32; //Number of te used to generate table
     const int ny = 32; //Number of ne used to generate table
     const int nz = 32; //Number of Bmag used to generate table
-     v0 = (round((v0 - 4) * (nz - 1)/6) + 0.5)/nw; //scale_height
+     v0 = (round((v0 - 3) * (nz - 1)/5) + 0.5)/nw; //scale_height
      v1 = (round((v1 - 0) * (nz - 1)/10) + 0.5)/nz; // Bmag
-     v4 = ((round((v3 -4) * (nx - 1)/11) + 0.5) + round((v2 - 12) * (ny - 1)/10) * nx)/(nx * ny); //Te + ne
+     v4 = ((round((v3 -2) * (nx - 1)/13) + 0.5) + round((v2 - 10) * (ny - 1)/15) * nx)/(nx * ny); //Te + ne
 
     printf("Coordinates in texture grid:\n");
     printf("Scale_height = %f, Bmag = %f, ne = %f, te = %f, ne+te = = %f\n", v0, v1, v2, v3, v4);
