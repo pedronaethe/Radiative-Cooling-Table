@@ -19,8 +19,8 @@
 
 /*battery of tests, for normal table generation, just put everything equals to 0*/
 #define BLACKBODYTEST (0) //Generates a table for the blackbody equation
-#define SYNCHROTRONTEST (1) //Generates a table for synchrotron equation
-#define C_SYNCHROTRONTEST (0)// Generates a table for comptonized synchrotron equation
+#define SYNCHROTRONTEST (0) //Generates a table for synchrotron equation
+#define C_SYNCHROTRONTEST (1)// Generates a table for comptonized synchrotron equation
 #define COMPTONTEST (0) // Generates a table with the compton values
 #define BREMSTRAHLUNGTEST (0) //Generates a table for bremmstrahlung equation
 #define ABSORPTIONDEPTHTEST (0) //Generates a table with absorption values
@@ -649,7 +649,7 @@ int main()
         FILE *file_result;
         file_result = fopen("bbody_table.txt", "w");
         printf("Starting the parallel processing...\n");
-        omp_set_num_threads(12);
+        omp_set_num_threads(omp_get_num_threads());
         #pragma omp parallel for collapse(4)
         for (i = 0; i < PARAMETER_H; i++) {
             for (j = 0; j < PARAMETER_B; j++) {
@@ -678,7 +678,7 @@ int main()
         FILE *file_result;
         file_result = fopen("synch_table.txt", "w");
         printf("Starting the parallel processing...\n");
-        omp_set_num_threads(12);
+        omp_set_num_threads(omp_get_num_threads());
         #pragma omp parallel for collapse(4)
         for (i = 0; i < PARAMETER_H; i++) {
             for (j = 0; j < PARAMETER_B; j++) {
@@ -707,13 +707,13 @@ int main()
         FILE *file_result;
         file_result = fopen("csynch_table.txt", "w");
         printf("Starting the parallel processing...\n");
-        omp_set_num_threads(12);
+        omp_set_num_threads(omp_get_num_threads());
         #pragma omp parallel for collapse(4)
         for (i = 0; i < PARAMETER_H; i++) {
             for (j = 0; j < PARAMETER_B; j++) {
                 for (k = 0; k < PARAMETER_NE; k++) {
                     for (l = 0; l < PARAMETER_TE; l++) {
-                        cooling_values[i][j][k][l] = log10(rsynch(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])) * comptonization_factor_ny(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
+                        cooling_values[i][j][k][l] = log10(rsync(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])) * comptonization_factor_ny(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
                         //printf("H = %le, B = %le, ne = %le, Te = %le, value = %.8e\n", H_values[i], B_values[j], ne_values[k], Te_values[l], cooling_values[i][j][k][l]);
                     }
                 }
@@ -736,7 +736,7 @@ int main()
         FILE *file_result;
         file_result = fopen("compton_table.txt", "w");
         printf("Starting the parallel processing...\n");
-        omp_set_num_threads(12);
+        omp_set_num_threads(omp_get_num_threads());
         #pragma omp parallel for collapse(4)
         for (i = 0; i < PARAMETER_H; i++) {
             for (j = 0; j < PARAMETER_B; j++) {
@@ -765,7 +765,7 @@ int main()
         FILE *file_result;
         file_result = fopen("brems_table.txt", "w");
         printf("Starting the parallel processing...\n");
-        omp_set_num_threads(12);
+        omp_set_num_threads(omp_get_num_threads());
         #pragma omp parallel for collapse(4)
         for (i = 0; i < PARAMETER_H; i++) {
             for (j = 0; j < PARAMETER_B; j++) {
@@ -794,7 +794,7 @@ int main()
         FILE *file_result;
         file_result = fopen("tau_table.txt", "w");
         printf("Starting the parallel processing...\n");
-        omp_set_num_threads(12);
+        omp_set_num_threads(omp_get_num_threads());
         #pragma omp parallel for collapse(4)
         for (i = 0; i < PARAMETER_H; i++) {
             for (j = 0; j < PARAMETER_B; j++) {
@@ -823,7 +823,7 @@ int main()
         FILE *file_result;
         file_result = fopen("cooling_table.txt", "w");
         printf("Starting the parallel processing...\n");
-        omp_set_num_threads(12);
+        omp_set_num_threads(omp_get_num_threads());
         #pragma omp parallel for collapse(4)
         for (i = 0; i < PARAMETER_H; i++) {
             for (j = 0; j < PARAMETER_B; j++) {

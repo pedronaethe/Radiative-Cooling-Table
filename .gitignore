@@ -6,3 +6,16 @@ cooling_table_log_mag.txt
 coolingtable
 coolingtexture
 parameters
+time.txt
+scale_height.txt
+synch_table.txt
+tau_table.txt
+*.exe
+evolution.txt
+cooling_table_threaded.txt
+*.lib
+bbody_table.txt
+brems_table.txt
+C_synch_table.txt
+compton_table.txt
+*.exp
