@@ -36,25 +36,25 @@ int main()
     while (i <= 31)
     {
         v1 = 3 + 5 * i/31;
-        fprintf(Fheight, "%.2f\n", v1);
+        fprintf(Fheight, "%.15f\n", v1);
         i = i + 1;
     }
 	while (k <= 31)
 	{
 		v2 = 10 + 15 * k/31;
-		fprintf(Feletronicdensity, "%.2f\n", v2);
+		fprintf(Feletronicdensity, "%.15f\n", v2);
 		k = k + 1;
 	}
 	while (j <= 31)
 	{
 		v3 = 2 + 13 * j/31;
-		fprintf(Ftemperature, "%.2f\n", v3);
+		fprintf(Ftemperature, "%.15f\n", v3);
 		j = j + 1;
 	}
 	while (l <= 31)
 	{
 		v4 = 10 * l/31;
-		fprintf(Fmag, "%.2f\n", v4);
+		fprintf(Fmag, "%.15f\n", v4);
 		l = l + 1;
 	}
 

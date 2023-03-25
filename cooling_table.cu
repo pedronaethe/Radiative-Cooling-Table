@@ -2,6 +2,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define SIZEOF_H 32
+#define SIZEOF_B 32
+#define SIZEOF_TE 32
+#define SIZEOF_NE 32
+#define N_RESOLUTION 33792
+#define SINGLE_TEST (0)
+#define RESOLUTION_TEST (1)
 cudaTextureObject_t coolTexObj;
 cudaArray *cuCoolArray = 0;
 
@@ -24,10 +31,10 @@ void Load_Cooling_Tables(float *cooling_table)
     double cool;
 
     int i = 0;
-    int nw = 32;
-    int nx = 32; // Number of Te data.
-    int ny = 32; // Number of ne data.
-    int nz = 32; // Number of Bmag data.
+    int nw = SIZEOF_H; 
+    int nx = SIZEOF_TE; // Number of Te data.
+    int ny = SIZEOF_NE; // Number of ne data.
+    int nz = SIZEOF_B; // Number of Bmag data.
 
     FILE *infile;
 
@@ -39,7 +46,7 @@ void Load_Cooling_Tables(float *cooling_table)
     bmag_arr = (double *)malloc(nw * nx * ny * nz * sizeof(double));
 
     // Reading the cooling table
-    infile = fopen("tau_table.txt", "r");
+    infile = fopen("cooling_table.txt", "r");
 
     if (infile == NULL)
     {
@@ -80,10 +87,10 @@ void CreateTexture(void)
 
     float *cooling_table; //Device Array with cooling floats
     // number of elements in each variable
-    const int nw = 32; //r
-    const int nx = 32; //te
-    const int ny = 32; //ne
-    const int nz = 32; //bmag
+    const int nw = SIZEOF_H; //H
+    const int nx = SIZEOF_TE; //te
+    const int ny = SIZEOF_NE; //ne
+    const int nz = SIZEOF_B; //bmag
     cooling_table = (float *)malloc(nw * nx * ny * nz * sizeof(float));
     Load_Cooling_Tables(cooling_table); //Loading Cooling Values into pointer
     //cudaArray Descriptor
@@ -119,265 +126,188 @@ void CreateTexture(void)
     cudaCreateTextureObject(&coolTexObj, &texRes, &texDescr, NULL);
     return;
 }
-__global__ void cooling_function(cudaTextureObject_t my_tex, float a0, float a1, float a2, float a3)
+__global__ void cooling_function(cudaTextureObject_t my_tex, float a0, float a1, float a2, float a3
+    #if(RESOLUTION_TEST)
+    , double * value
+    #endif
+    )
 {
-    float v0, v1, v2, v3, v4, lambda;
+    float v0, v1, v2, v3, v4;
+    double lambda;
 
     //Values for testing;
-    v0 = a0; //R parameter
+    v0 = a0; //H parameter
     v1 = a1; //Bmag parameter
     v2 = a2; //ne parameter
     v3 = a3; //te parameter
+    #if(SINGLE_TEST)
     printf("Values you chose:\n");
     printf("scale_height = %f, Bmag = %f, ne = %f, Te = %f\n", v0, v1, v2, v3);
-
-    //For the non normalized version only.
-    //The remapping formula goes (variable - initial_value) * (N - 1)/(max_value - init_value)
-    // const int nx = 70; //Number of te used to generate table
-    // const int ny = 70; //Number of ne used to generate table
-    // const int nz = 70; //Number of r used to generate table
-    //v1 = round((v1 - 6) * (nz - 1)/6);
-    //v2 = round((v2 - 12) * (ny - 1)/8);
-    //v3 = round((v3 - 6) * (nx - 1)/4);
-    //printf("a = %f, b = %f, c = %f\n", v1, v2, v3);
+    #endif
 
     // For the normalized version only.
-    const int nw = 32; //Number of R used to generate table
-    const int nx = 32; //Number of te used to generate table
-    const int ny = 32; //Number of ne used to generate table
-    const int nz = 32; //Number of Bmag used to generate table
+    const int nw = SIZEOF_H; //Number of H used to generate table
+    const int nx = SIZEOF_TE; //Number of te used to generate table
+    const int ny = SIZEOF_NE; //Number of ne used to generate table
+    const int nz = SIZEOF_B; //Number of Bmag used to generate table
      v0 = (round((v0 - 3) * (nz - 1)/5) + 0.5)/nw; //scale_height
      v1 = (round((v1 - 0) * (nz - 1)/10) + 0.5)/nz; // Bmag
      v4 = ((round((v3 -2) * (nx - 1)/13) + 0.5) + round((v2 - 10) * (ny - 1)/15) * nx)/(nx * ny); //Te + ne
-
-    printf("Coordinates in texture grid:\n");
-    printf("Scale_height = %f, Bmag = %f, ne = %f, te = %f, ne+te = = %f\n", v0, v1, v2, v3, v4);
 
     //For the non normalized version only.
     //lambda = tex3D<float>(coolTexObj, v3 + 0.5f, v2 + 0.5f, v1 + 0.5f); 
 
     // //For the normalized version only.
     lambda = tex3D<float>(my_tex, v4, v1, v0); 
-    printf("Cooling value = %lf\n", lambda);
-    return;
-}
-
-
-
-int main()
-{
-    float read0, read1, read2, read3;
-    float loop = 100;
-    char str[1];
-    CreateTexture();
-    while (loop > 1)
-    {
-	    printf("scale_height value:\n");
-	    scanf("%f", &read0);
-	    printf("Bmag value:\n");
-	    scanf("%f", &read1);
-	    printf("ne value:\n");
-	    scanf("%f", &read2);
-	    printf("Te value:\n");
-	    scanf("%f", &read3);
-	    cooling_function<<<1, 1>>>(coolTexObj, read0, read1, read2, read3);
-	    printf("Do you want to read other values? y/n\n");
-	    scanf("%s", str);
-	    if (strcmp(str, "n") == 0)
-	    {
-	    	loop = 0;
-	    }
-	}
-    cudaDestroyTextureObject(coolTexObj);
-    return 0;
-}
-//DEPRECATED Texture Reference in CUDA 11.0
-/*
-//Texture and cudaArray declaration.
- texture<float, 3, cudaReadModeElementType> coolTexObj;
-cudaArray *cuCoolArray = 0;
-
-
-// Load the cooling_table into the CPU Memory.
-void Load_Cooling_Tables(float *cooling_table)
-{
-    double *ne_arr;
-    double *te_arr;
-    double *bmag_arr;
-    double *cool_arr;
-
-    double ne;
-    double te;
-    double bmag;
-    double cool;
-
-    int i = 0;
-    int nx = 100; // Number of Te data.
-    int ny = 100; // Number of ne data.
-    int nz = 100; // Number of Bmag data.
-
-    FILE *infile;
-
-    // Allocate arrays for temperature, electronic density and scale_height data.
-    ne_arr = (double *)malloc(nx * ny * nz * sizeof(double));
-    te_arr = (double *)malloc(nx * ny * nz * sizeof(double));
-    cool_arr = (double *)malloc(nx * ny *  nz * sizeof(double));
-    bmag_arr = (double *)malloc(nx * ny * nz * sizeof(double));
-
-    // Reading the cooling table
-    infile = fopen("cooling_table_log_mag.txt", "r"); // this command is to ignore the first line.
-
-    if (infile == NULL)
-    {
-        printf("Unable to open cooling file.\n");
-        exit(1);
-    }
-
-    fscanf(infile, "%*[^\n]\n");
-    while (fscanf(infile, "%lf, %lf, %lf, %lf", &bmag, &ne, &te, &cool) == 4)
-    {
-        ne_arr[i] = ne;
-        te_arr[i] = te;
-        bmag_arr[i] = bmag;
-        cool_arr[i] = cool;
-
-        i++;
-    }
-
-    fclose(infile);
-    // copy data from cooling array into the table
-    for (i = 0; i < nx * ny * nz; i++)
-    {
-        cooling_table[i] = float(cool_arr[i]);
-    }
-
-    // Free arrays used to read in table data
-    free(ne_arr);
-    free(te_arr);    
-    free(bmag_arr);
-    free(cool_arr);
-}
-
- // \brief Load the Cloudy cooling tables into texture memory on the GPU. 
-void Load_Cuda_Textures()
-{
-
-    float *cooling_table;
-
-    // number of elements in each variable
-    const int nx = 100; //te
-    const int ny = 100; //ne
-    const int nz = 100; //bmag
-
-
-    // allocate host arrays to be copied to textures
-    cooling_table = (float *)malloc(nx* ny * nz * sizeof(float));
-
-    // Load cooling tables into the host arrays
-    Load_Cooling_Tables(cooling_table);
-
-    // Allocate CUDA arrays in device memory
-    // The value of 64 in the CUDA channel must be checked, otherwise use 32 for float.
-    cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindFloat);
-    cudaExtent volumeSize = make_cudaExtent(nx, ny, nz);
-    cudaMalloc3DArray(&cuCoolArray, &channelDesc, volumeSize);
-
-    // Copy to device memory the cooling and heating arrays
-    // in host memory
-    cudaMemcpy3DParms copyParams = {0};
-    copyParams.srcPtr = make_cudaPitchedPtr((void *)cooling_table, nx * sizeof(float), nx, ny); 
-    copyParams.dstArray = cuCoolArray;
-    copyParams.extent = volumeSize;
-    copyParams.kind = cudaMemcpyHostToDevice;
-    cudaMemcpy3D(&copyParams);
-
-    // Specify texture reference parameters (same for both tables)
-    coolTexObj.addressMode[0] = cudaAddressModeClamp; // out-of-bounds fetches return border values
-    coolTexObj.addressMode[1] = cudaAddressModeClamp; // out-of-bounds fetches return border values
-    coolTexObj.addressMode[2] = cudaAddressModeClamp; // out-of-bounds fetches return border values
-    coolTexObj.filterMode = cudaFilterModeLinear;     // bi-linear interpolation
-    coolTexObj.normalized = true;                     // Normalization of logarithm scale going from 0 to 1
-
-    // Command to bind the array into the texture
-    cudaBindTextureToArray(coolTexObj, cuCoolArray);
-    // Free the memory associated with the cooling tables on the host
-    free(cooling_table);
-}
-
-void Free_Cuda_Textures()
-{
-    // unbind the cuda textures
-    cudaUnbindTexture(coolTexObj);
-    // Free the device memory associated with the cuda arrays
-    cudaFreeArray(cuCoolArray);
-}
-
-//Function used to interpolate the values of the cooling table.
-__global__ void cooling_function(float a1, float a2, float a3)
-{
-    float v1, v2, v3, lambda;
-
-    //Values for testing;
-    v1 = a1; //Bmag parameter
-    v2 = a2; //ne parameter
-    v3 = a3; //te parameter
-    printf("Values you chose:\n");
-    printf("Bmag = %f, ne = %f, Te = %f\n", v1, v2, v3);
-
-    //For the non normalized version only.
-    //The remapping formula goes (variable - initial_value) * (N - 1)/(max_value - init_value)
-    // const int nx = 70; //Number of te used to generate table
-    // const int ny = 70; //Number of ne used to generate table
-    // const int nz = 70; //Number of r used to generate table
-    //v1 = round((v1 - 6) * (nz - 1)/6);
-    //v2 = round((v2 - 12) * (ny - 1)/8);
-    //v3 = round((v3 - 6) * (nx - 1)/4);
-    //printf("a = %f, b = %f, c = %f\n", v1, v2, v3);
-
-    // For the normalized version only.
-    const int nx = 100; //Number of te used to generate table
-    const int ny = 100; //Number of ne used to generate table
-    const int nz = 100; //Number of Bmag used to generate table
-     v1 = (round((v1 - 0.1) * (nz - 1)/9.99) + 0.5)/nz;
-     v2 = (round((v2 - 12) * (ny - 1)/10) + 0.5 )/ny;
-     v3 = (round((v3 - 4) * (nx - 1)/11) + 0.5 )/nx;
-
+    #if(SINGLE_TEST)
     printf("Coordinates in texture grid:\n");
-    printf("Bmag = %f, ne = %f, Te = %f\n", v1, v2, v3);
-
-    //For the non normalized version only.
-    //lambda = tex3D<float>(coolTexObj, v3 + 0.5f, v2 + 0.5f, v1 + 0.5f); 
-
-    // //For the normalized version only.
-    lambda = tex3D<float>(coolTexObj, v3, v2, v1); 
+    printf("Scale_height = %f, Bmag = %f, ne = %f, te = %f, ne+te = = %f\n", v0, v1, v2, v3, v4);
     printf("Cooling value = %lf\n", lambda);
+    #endif
+
+    #if(RESOLUTION_TEST)
+        *value = lambda;
+    #endif
     return;
 }
 
+__global__ void cooling_function_test(cudaTextureObject_t my_tex, double * a0, double * a1, double * a2, double * a3, double * value)
+{
+    double v0, v1, v2, v3, v4;
+    double lambda;
+    int i;
+    // For the normalized version only.
+    const int nw = SIZEOF_H; //Number of H used to generate table
+    const int nx = SIZEOF_TE; //Number of te used to generate table
+    const int ny = SIZEOF_NE; //Number of ne used to generate table
+    const int nz = SIZEOF_B; //Number of Bmag used to generate table
+    for (i = 0; i < N_RESOLUTION; i++) {
+        v0 = a0[i]; //H parameter
+        v1 = a1[i]; //Bmag parameter
+        v2 = a2[i]; //ne parameter
+        v3 = a3[i]; //te parameter
+
+        //printf("scale_height = %f, Bmag = %f, ne = %f, Te = %f\n", v0, v1, v2, v3);
+
+        v0 = (round((v0 - 3) * (nz - 1)/5) + 0.5)/nw; //scale_height
+        v1 = (round((v1 - 0) * (nz - 1)/10) + 0.5)/nz; // Bmag
+        v4 = ((round((v3 -2) * (nx - 1)/13) + 0.5) + round((v2 - 10) * (ny - 1)/15) * nx)/(nx * ny); //Te + ne
+
+        // //For the normalized version only.
+        lambda = tex3D<float>(my_tex, v4, v1, v0); 
+        //printf("lambda = %le\n", lambda);
+
+        value[i] = lambda;
+    }
+    return;
+}
+
+
 int main()
 {
-    float read1, read2, read3;
-    float loop = 100;
-    char str[1];
-    Load_Cuda_Textures();
-    while (loop > 1)
-    {
-	    printf("Bmag value:\n");
-	    scanf("%f", &read1);
-	    printf("ne value:\n");
-	    scanf("%f", &read2);
-	    printf("Te value:\n");
-	    scanf("%f", &read3);
-	    cooling_function<<<1, 1>>>(read1, read2, read3);
-        sleep(1);
-	    printf("Do you want to read other values? y/n\n");
-	    scanf("%s", str);
-	    if (strcmp(str, "n") == 0)
-	    {
-	    	loop = 0;
-	    }
-	}
-    Free_Cuda_Textures();
+    #if(SINGLE_TEST)
+        float read0, read1, read2, read3;
+        float loop = 100;
+        char str[1];
+        CreateTexture();
+        while (loop > 1)
+        {
+            printf("scale_height value:\n");
+            scanf("%f", &read0);
+            printf("Bmag value:\n");
+            scanf("%f", &read1);
+            printf("ne value:\n");
+            scanf("%f", &read2);
+            printf("Te value:\n");
+            scanf("%f", &read3);
+            cooling_function<<<1, 1>>>(coolTexObj, read0, read1, read2, read3);
+            printf("Do you want to read other values? y/n\n");
+            scanf("%s", str);
+            if (strcmp(str, "n") == 0)
+            {
+                loop = 0;
+            }
+        }
+        cudaDestroyTextureObject(coolTexObj);
+    #elif(RESOLUTION_TEST)
+        double *H_test, *B_test, *ne_test, *Te_test, *cool_test;
+        H_test = (double*)malloc(N_RESOLUTION * sizeof(double));
+        B_test = (double*)malloc(N_RESOLUTION * sizeof(double));
+        ne_test = (double*)malloc(N_RESOLUTION * sizeof(double));
+        Te_test = (double*)malloc(N_RESOLUTION * sizeof(double));
+        cool_test = (double*)malloc(N_RESOLUTION * sizeof(double));
+        int i;
+
+        //Allocating memory in device memory.
+        double* d_H_test;
+        cudaMalloc(&d_H_test, N_RESOLUTION * sizeof(double));
+        double * d_B_test;
+        cudaMalloc(&d_B_test, N_RESOLUTION * sizeof(double));
+        double * d_ne_test;
+        cudaMalloc(&d_ne_test, N_RESOLUTION * sizeof(double));
+        double * d_Te_test;
+        cudaMalloc(&d_Te_test, N_RESOLUTION * sizeof(double));
+        double * d_cool_test;
+        cudaMalloc(&d_cool_test, N_RESOLUTION * sizeof(double));
+
+
+        printf("Initializing resolution test reading\n");
+        FILE *file_result;
+        file_result = fopen("cooling_table_test_cuda.txt", "w");
+        FILE *file_height_test;
+        file_height_test = fopen("scaleheight_sim.txt", "r");
+        FILE *file_e_density_test;
+        file_e_density_test = fopen("electronic_density_sim.txt", "r");
+        FILE *file_temperature_test;
+        file_temperature_test = fopen("electronic_temperature_sim.txt", "r");
+        FILE *file_mag_field_test;
+        file_mag_field_test = fopen("magnetic_field_sim.txt", "r");
+        CreateTexture();
+        for (i = 0; fscanf(file_height_test, "%lf", H_test + i) == 1; i++) {
+            // Do nothing inside the loop body, everything is done in the for loop header
+        }
+        for (i = 0; fscanf(file_mag_field_test, "%lf", B_test + i) == 1; i++) {
+            // Do nothing inside the loop body, everything is done in the for loop header
+        }
+        for (i = 0; fscanf(file_e_density_test, "%lf", ne_test + i) == 1; i++) {
+            // Do nothing inside the loop body, everything is done in the for loop header
+        }
+        for (i = 0; fscanf(file_temperature_test, "%lf", Te_test + i) == 1; i++) {
+            // Do nothing inside the loop body, everything is done in the for loop header
+        }
+        cudaMemcpy(d_H_test, H_test, N_RESOLUTION * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_B_test, B_test, N_RESOLUTION * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_ne_test, ne_test, N_RESOLUTION * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_Te_test, Te_test, N_RESOLUTION * sizeof(double), cudaMemcpyHostToDevice);
+
+        printf("Reading and getting values from texture memory...\n");
+
+        cooling_function_test<<<1, 1>>>(coolTexObj, d_H_test, d_B_test, d_ne_test, d_Te_test, d_cool_test);
+        cudaMemcpy(cool_test, d_cool_test, N_RESOLUTION * sizeof(double), cudaMemcpyDeviceToHost);
+
+        for (i = 0; i < N_RESOLUTION; i++) {
+            fprintf(file_result, "%.8e\n", cool_test[i]);
+        } 
+
+        free(H_test);
+        free(B_test);
+        free(ne_test);
+        free(Te_test);
+        free(cool_test);
+        cudaDestroyTextureObject(coolTexObj);
+
+        cudaFree(d_H_test);
+        cudaFree(d_B_test);
+        cudaFree(d_ne_test);
+        cudaFree(d_Te_test);
+        cudaFree(d_cool_test);
+
+        fclose(file_height_test);
+        fclose(file_e_density_test);
+        fclose(file_temperature_test);
+        fclose(file_mag_field_test);
+        printf("Test Sucessfull\n");
+    #endif
 
     return 0;
-}*/
+}

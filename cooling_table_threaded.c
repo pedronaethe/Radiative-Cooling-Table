@@ -20,10 +20,11 @@
 /*battery of tests, for normal table generation, just put everything equals to 0*/
 #define BLACKBODYTEST (0) //Generates a table for the blackbody equation
 #define SYNCHROTRONTEST (0) //Generates a table for synchrotron equation
-#define C_SYNCHROTRONTEST (1)// Generates a table for comptonized synchrotron equation
+#define C_SYNCHROTRONTEST (0)// Generates a table for comptonized synchrotron equation
 #define COMPTONTEST (0) // Generates a table with the compton values
 #define BREMSTRAHLUNGTEST (0) //Generates a table for bremmstrahlung equation
 #define ABSORPTIONDEPTHTEST (0) //Generates a table with absorption values
+#define RECALCULATE_GRID_TEST (1)
 #define SINGLE_VALUE (0) // Individual value of every function for a certain quantity of parameters
 
 #define PARAMETER_H 32
@@ -644,11 +645,54 @@ int main()
     for (i = 0; fscanf(file_temperature, "%lf", &Te_values[i]) == 1; i++) {
         // Do nothing inside the loop body, everything is done in the for loop header
     }
-    #if (BLACKBODYTEST)
+    #if(SINGLE_VALUE)
+        double H, B, ne, te;
+        double loop = 100;
+        char str[1];
+        while (loop > 1)
+        {
+            printf("valor do scale_height\n");
+            scanf("%le", &H);
+            H = pow(10, H);
+            printf ("valor do B\n");
+            scanf("%le", &B);
+            B = pow(10, B);
+            printf("Valor de edens\n");
+            scanf("%le", &ne);
+            ne = pow(10, ne);
+            printf ("valor de etemp\n");
+            scanf("%le", &te);
+            te= pow(10, te);
+            printf("H = %le, ne = %le, Te = %le, B = %le\n", H, ne, te, B);
+            printf("\nOne of the roots is: %lf\n",secant_bounded(f, H, ne, te, B));
+            printf("o valor do thetae =:%.11e\n", thetae(te));
+            //printf("o valor do H_aqui =:%le\n", H);
+            //printf("o valor do H =:%le\n", scale_height(H, ne, te));
+            printf("O valor do bremmstrahlung ee =:%le\n", bremmstrahlung_ee(ne, te));
+            printf("O valor do bremmstrahlung ei =:%le\n", bremmstrahlung_ei(ne, te));
+            printf("O valor do bremmstrahlung total =:%le\n", bremmscooling_rate(ne, te));
+            printf("o valor da freq crit =: %.11e\n", crit_freq(H, ne, te, B));
+            printf("o valor do rsync =: %le\n", rsync(H, ne, te, B));
+            printf("o valor do comptonization factor =: %.11e\n", comptonization_factor_ny(H, ne, te, B));
+            printf("o valor do cooling total no disco fino =:%le\n", totalthincooling_rate(H, ne, te, B));
+            printf("O valor do tau_scat =:%le\n", soptical_depth(H, ne, te));
+            printf("O valor do tau_abs =:%le\n", absoptical_depth(H, ne, te, B));
+            printf("O valor do tau_total =:%le\n", total_optical_depth(H, ne, te, B));
+            printf("o valor do cooling total =:%le\n", total_cooling(H, ne, te, B));
+            printf("o valor do blackbody =:%le\n", bbody(H, ne, te, B));
+            printf("o valor do cooling total em log:%le\n", log10(total_cooling(H, ne, te, B)));
+            printf("Do you want to read other values? y/n\n");
+            scanf("%s", str);
+            if (strcmp(str, "n") == 0)
+            {
+                loop = 0;
+            }
+        }
+    #elif (BLACKBODYTEST)
         printf("Starting Black Body Table\n");
         FILE *file_result;
         file_result = fopen("bbody_table.txt", "w");
-        printf("Starting the parallel processing...\n");
+        printf("Calculating the table in parallelized way. This can take a while...\n");
         omp_set_num_threads(omp_get_num_threads());
         #pragma omp parallel for collapse(4)
         for (i = 0; i < PARAMETER_H; i++) {
@@ -677,7 +721,7 @@ int main()
         printf("Starting Synch Table\n");
         FILE *file_result;
         file_result = fopen("synch_table.txt", "w");
-        printf("Starting the parallel processing...\n");
+        printf("Calculating the table in parallelized way. This can take a while...\n");
         omp_set_num_threads(omp_get_num_threads());
         #pragma omp parallel for collapse(4)
         for (i = 0; i < PARAMETER_H; i++) {
@@ -705,8 +749,8 @@ int main()
     #elif(C_SYNCHROTRONTEST)
         printf("Starting C_synch Table\n");
         FILE *file_result;
-        file_result = fopen("csynch_table.txt", "w");
-        printf("Starting the parallel processing...\n");
+        file_result = fopen("C_synch_table.txt", "w");
+        printf("Calculating the table in parallelized way. This can take a while...\n");
         omp_set_num_threads(omp_get_num_threads());
         #pragma omp parallel for collapse(4)
         for (i = 0; i < PARAMETER_H; i++) {
@@ -735,7 +779,7 @@ int main()
         printf("Starting Compton Table\n");
         FILE *file_result;
         file_result = fopen("compton_table.txt", "w");
-        printf("Starting the parallel processing...\n");
+        printf("Calculating the table in parallelized way. This can take a while...\n");
         omp_set_num_threads(omp_get_num_threads());
         #pragma omp parallel for collapse(4)
         for (i = 0; i < PARAMETER_H; i++) {
@@ -764,14 +808,14 @@ int main()
         printf("Starting Brems Table\n");
         FILE *file_result;
         file_result = fopen("brems_table.txt", "w");
-        printf("Starting the parallel processing...\n");
+        printf("Calculating the table in parallelized way. This can take a while...\n");
         omp_set_num_threads(omp_get_num_threads());
         #pragma omp parallel for collapse(4)
         for (i = 0; i < PARAMETER_H; i++) {
             for (j = 0; j < PARAMETER_B; j++) {
                 for (k = 0; k < PARAMETER_NE; k++) {
                     for (l = 0; l < PARAMETER_TE; l++) {
-                        cooling_values[i][j][k][l] = log10(bremmscooling_rate(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
+                        cooling_values[i][j][k][l] = log10(bremmscooling_rate(pow(10,ne_values[k]), pow(10,Te_values[l])));
                         //printf("H = %le, B = %le, ne = %le, Te = %le, value = %.8e\n", H_values[i], B_values[j], ne_values[k], Te_values[l], cooling_values[i][j][k][l]);
                     }
                 }
@@ -793,7 +837,7 @@ int main()
         printf("Starting Tau_abs Table\n");
         FILE *file_result;
         file_result = fopen("tau_table.txt", "w");
-        printf("Starting the parallel processing...\n");
+        printf("Calculating the table in parallelized way. This can take a while...\n");
         omp_set_num_threads(omp_get_num_threads());
         #pragma omp parallel for collapse(4)
         for (i = 0; i < PARAMETER_H; i++) {
@@ -818,11 +862,52 @@ int main()
                 }
             }
         }
+    #elif(RECALCULATE_GRID_TEST)
+        FILE *file_result;
+        file_result = fopen("cooling_table_test.txt", "w");
+        FILE *file_height_test;
+        file_height_test = fopen("scaleheight_sim.txt", "r");
+        FILE *file_e_density_test;
+        file_e_density_test = fopen("electronic_density_sim.txt", "r");
+        FILE *file_temperature_test;
+        file_temperature_test = fopen("electronic_temperature_sim.txt", "r");
+        FILE *file_mag_field_test;
+        file_mag_field_test = fopen("magnetic_field_sim.txt", "r");
+
+        if (file_height == NULL || file_e_density == NULL || file_temperature == NULL || file_mag_field == NULL)
+        {
+            printf("Error Reading Files from test\n");
+            exit(0);
+        }
+        double H_test[33792], B_test[33792], ne_test[33792], Te_test[33792], cool_test;
+        for (i = 0; fscanf(file_height_test, "%lf", &H_test[i]) == 1; i++) {
+            // Do nothing inside the loop body, everything is done in the for loop header
+        }
+        for (i = 0; fscanf(file_mag_field_test, "%lf", &B_test[i]) == 1; i++) {
+            // Do nothing inside the loop body, everything is done in the for loop header
+        }
+        for (i = 0; fscanf(file_e_density_test, "%lf", &ne_test[i]) == 1; i++) {
+            // Do nothing inside the loop body, everything is done in the for loop header
+        }
+        for (i = 0; fscanf(file_temperature_test, "%lf", &Te_test[i]) == 1; i++) {
+            // Do nothing inside the loop body, everything is done in the for loop header
+        }
+        printf("Calculating the table in parallelized way. This can take a while...\n");
+        for (i = 0; i < 33792; i++) {
+            cool_test = log10(total_cooling(pow(10,H_test[i]), pow(10,ne_test[i]), pow(10,Te_test[i]), pow(10,B_test[i])));
+            //printf("H = %le, B = %le, ne = %le, Te = %le, value = %.8e\n", H_test[i], B_test[i], ne_test[i], Te_test[i], cool_test);
+            fprintf(file_result, "%.8e\n", cool_test);
+        } 
+        fclose(file_height_test);
+        fclose(file_e_density_test);
+        fclose(file_temperature_test);
+        fclose(file_mag_field_test);
+
     #else
         printf("Starting Cooling Table\n");
         FILE *file_result;
         file_result = fopen("cooling_table.txt", "w");
-        printf("Starting the parallel processing...\n");
+        printf("Calculating the table in parallelized way. This can take a while...\n");
         omp_set_num_threads(omp_get_num_threads());
         #pragma omp parallel for collapse(4)
         for (i = 0; i < PARAMETER_H; i++) {
@@ -851,7 +936,10 @@ int main()
     fclose(file_height);
     fclose(file_e_density);
     fclose(file_temperature);
-    fclose(file_result);
+
+    #if(!SINGLE_VALUE)
+        fclose(file_result);
+    #endif
     fclose(file_mag_field);
     for (int i = 0; i < PARAMETER_B; i++) {
         for (int j = 0; j < PARAMETER_NE; j++) {

@@ -19,3 +19,5 @@ brems_table.txt
 C_synch_table.txt
 compton_table.txt
 *.exp
+csynch_table.txt
+*.txt
