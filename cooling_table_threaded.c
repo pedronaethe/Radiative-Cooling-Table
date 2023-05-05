@@ -24,8 +24,9 @@
 #define COMPTONTEST (0) // Generates a table with the compton values
 #define BREMSTRAHLUNGTEST (0) //Generates a table for bremmstrahlung equation
 #define ABSORPTIONDEPTHTEST (0) //Generates a table with absorption values
-#define RECALCULATE_GRID_TEST (1)
+#define RECALCULATE_GRID_TEST (0)
 #define SINGLE_VALUE (0) // Individual value of every function for a certain quantity of parameters
+#define COMPARISON_MARCEL (1) //Compare plot A.1 of Marcel et al. 2018: A unified accretion-ejection paradigm for black hole X-ray binaries
 
 #define PARAMETER_H 32
 #define PARAMETER_B 32
@@ -563,8 +564,8 @@ double comptonization_factor_ny(double scale_height, double edens, double etemp,
     double eta3 = -1 - log(prob)/log(A);
     double result = 1 + eta1* (1 - pow(eta2, eta3));
     if (eta2 > 1){
-        printf("Compton formula not valid, exiting...");
-        exit(1);
+        //printf("Compton formula not valid, exiting...");
+        //exit(1);
     }
     return result;
 }
@@ -599,6 +600,16 @@ double total_cooling(double scale_height, double edens, double etemp, double mag
 double bbody(double scale_height, double edens, double etemp, double mag_field)
 {//All the function was checked step by step, seems to be working good.
     return 8. * C_sigma * pow(etemp, 4.) / (3 * scale_height * total_optical_depth(scale_height, edens, etemp, mag_field));
+}
+
+void logspace(double start, double end, int num, double* result) {
+    double log_start = log10(start); //Initial value
+    double log_end = log10(end); //End value
+    double step = (log_end - log_start) / (num - 1); // number of steps
+    int i;
+    for (i = 0; i < num; ++i) {
+        result[i] = pow(10.0, log_start + i * step);
+    }
 }
 
 int main()
@@ -645,7 +656,28 @@ int main()
     for (i = 0; fscanf(file_temperature, "%lf", &Te_values[i]) == 1; i++) {
         // Do nothing inside the loop body, everything is done in the for loop header
     }
-    #if(SINGLE_VALUE)
+
+    #if (COMPARISON_MARCEL)
+        double B_test, ne_test, *te_test, H = 0.1 * 1.e6 * 30, *tau_test, mu = 0.1, result;
+        tau_test = malloc(20 * sizeof(double));
+        te_test = malloc(20 * sizeof(double));
+        double tau_start = 1.e-6, tau_end = 5.e2;
+        double te_start = 5.e4, te_end = 2.e11;
+        FILE *file_result;
+        file_result = fopen("marcel_comp.txt", "w");
+        logspace(tau_start, tau_end, 20, tau_test);
+        logspace(te_start, te_end, 20, te_test);
+        for (i = 0; i < 20; i++) {
+            for(k = 0; k < 20; k++){
+                ne_test = tau_test[i]/(H * THOMSON_CGS);
+                B_test = sqrt(2 * mu *BOLTZ_CGS* ne_test * te_test[k]);
+                result = totalthincooling_rate(H, ne_test, te_test[k], B_test);
+                fprintf(file_result, "%.8e, ", result);
+
+            }
+        }
+
+    #elif(SINGLE_VALUE)
         double H, B, ne, te;
         double loop = 100;
         char str[1];
