@@ -6,10 +6,13 @@
 #define SIZEOF_B 32
 #define SIZEOF_TE 32
 #define SIZEOF_NE 32
-#define N_RESOLUTION 33792
-#define SINGLE_TEST (0)
-#define RESOLUTION_TEST (1)
+#define N_RESOLUTION 23101440
+#define SINGLE_TEST (1)
+#define RESOLUTION_TEST (0)
+#define COMPARISON_MARCEL (0)
 #define DT 7.336005915070878e-07
+#define THOMSON_CGS (6.652e-25) 
+#define BOLTZ_CGS (1.3806504e-16)
 cudaTextureObject_t coolTexObj;
 cudaArray *cuCoolArray = 0;
 
@@ -19,6 +22,7 @@ cudaArray *cuCoulombArray = 0;
 // Load the cooling_table into the CPU Memory.
 void Load_Cooling_Tables(float *cooling_table)
 {
+    printf("Loading Table...\n");
     double *scale_height_arr;
     double *ne_arr;
     double *te_arr;
@@ -54,19 +58,15 @@ void Load_Cooling_Tables(float *cooling_table)
         printf("Unable to open cooling file.\n");
         exit(1);
     }
-
+    printf("Reading Data...\n");
     fscanf(infile, "%*[^\n]\n"); // this command is to ignore the first line.
     while (fscanf(infile, "%lf, %lf, %lf, %lf, %lf", &scale_height, &bmag, &ne, &te, &cool) == 5)
     {
-        scale_height_arr[i] = scale_height;
-        ne_arr[i] = ne;
-        te_arr[i] = te;
-        bmag_arr[i] = bmag;
         cool_arr[i] = cool;
 
         i++;
     }
-
+    printf("Finished transfering .txt data to memory!\n");
     fclose(infile);
     // copy data from cooling array into the table
     for (i = 0; i < nw * nx * ny * nz; i++)
@@ -80,12 +80,13 @@ void Load_Cooling_Tables(float *cooling_table)
     free(te_arr);    
     free(bmag_arr);
     free(cool_arr);
+    printf("Table Loaded!\n");
+
     return;
 }
 
 void CreateTexture(void)
 {
-
     float *cooling_table; //Device Array with cooling floats
     // number of elements in each variable
     const int nw = SIZEOF_H; //H
@@ -99,13 +100,13 @@ void CreateTexture(void)
     //cuda Array
     cudaArray *cuCoolArray;
     //checkCudaErrors(cudaMalloc3DArray(&cuCoolArray, &channelDesc, make_cudaExtent(nx*sizeof(float),ny,nz), 0));
-    cudaMalloc3DArray(&cuCoolArray, &channelDesc, make_cudaExtent(nx*ny,nz, nw), 0);
+    cudaMalloc3DArray(&cuCoolArray, &channelDesc, make_cudaExtent(nx,ny * nz, nw), 0);
     cudaMemcpy3DParms copyParams = {0};
 
     //Array creation
-    copyParams.srcPtr   = make_cudaPitchedPtr((void *) cooling_table, nx * ny * sizeof(float), nx * ny, nz);
+    copyParams.srcPtr   = make_cudaPitchedPtr((void *) cooling_table, nx * sizeof(float), nx, ny * nz);
     copyParams.dstArray = cuCoolArray;
-    copyParams.extent   = make_cudaExtent(nx * ny, nz, nw);
+    copyParams.extent   = make_cudaExtent(nx, ny * nz, nw);
     copyParams.kind     = cudaMemcpyHostToDevice;
     //checkCudaErrors(cudaMemcpy3D(&copyParams));
     cudaMemcpy3D(&copyParams);
@@ -125,22 +126,20 @@ void CreateTexture(void)
     texDescr.readMode = cudaReadModeElementType;
     //checkCudaErrors(cudaCreateTextureObject(&coolTexObj, &texRes, &texDescr, NULL));}
     cudaCreateTextureObject(&coolTexObj, &texRes, &texDescr, NULL);
+    printf("Texture Created!\n");
     return;
 }
-__global__ void cooling_function(cudaTextureObject_t my_tex, float a0, float a1, float a2, float a3
-    #if(RESOLUTION_TEST)
-    , double * value
-    #endif
+__global__ void cooling_function(cudaTextureObject_t my_tex, float a0, float a1, float a2, float a3, float* result
     )
-{
+{ 
     float v0, v1, v2, v3, v4;
     double lambda;
-
     //Values for testing;
     v0 = a0; //H parameter
     v1 = a1; //Bmag parameter
     v2 = a2; //ne parameter
     v3 = a3; //te parameter
+    printf("v0 = %le, v1 = %le, v2 = %le, v3 = %le \n", v0, v1, v2, v3);
     #if(SINGLE_TEST)
     printf("Values you chose:\n");
     printf("scale_height = %f, Bmag = %f, ne = %f, Te = %f\n", v0, v1, v2, v3);
@@ -151,24 +150,52 @@ __global__ void cooling_function(cudaTextureObject_t my_tex, float a0, float a1,
     const int nx = SIZEOF_TE; //Number of te used to generate table
     const int ny = SIZEOF_NE; //Number of ne used to generate table
     const int nz = SIZEOF_B; //Number of Bmag used to generate table
-     v0 = (round((v0 - 3) * (nz - 1)/5) + 0.5)/nw; //scale_height
-     v1 = (round((v1 - 0) * (nz - 1)/10) + 0.5)/nz; // Bmag
-     v4 = ((round((v3 -2) * (nx - 1)/13) + 0.5) + round((v2 - 10) * (ny - 1)/15) * nx)/(nx * ny); //Te + ne
+    //  v0 = (round((v0 - 3) * (nz - 1)/5) + 0.5)/nw; //scale_height
+    //  v1 = (round((v1 - 0) * (nz - 1)/10) + 0.5)/nz; // Bmag
+    //  v4 = ((round((v3 -2) * (nx - 1)/13) + 0.5) + round((v2 - 10) * (ny - 1)/15) * nx)/(nx * ny); //Te + ne
 
+    v0 = (round((a0 - 5.) * (nw - 1.)/3.) + 0.5)/nw;
+    v1 = (round((a2 - 8.) * (ny - 1.)/15.) + 0.5 + round((a1 - 0.) * (nz - 1.)/10.) * ny)/(nz * ny);
+    v4 = (round((a3 - 2.) * (nx - 1.)/13.) + 0.5)/nx;
     //For the non normalized version only.
     //lambda = tex3D<float>(coolTexObj, v3 + 0.5f, v2 + 0.5f, v1 + 0.5f); 
 
     // //For the normalized version only.
-    lambda = tex3D<float>(my_tex, v4, v1, v0); 
-    #if(SINGLE_TEST)
+    lambda = tex3D<float>(my_tex, v4, v1, v0);
+    *result = lambda;
     printf("Coordinates in texture grid:\n");
     printf("Scale_height = %f, Bmag = %f, ne = %f, te = %f, ne+te = = %f\n", v0, v1, v2, v3, v4);
     printf("Cooling value = %lf\n", lambda);
-    #endif
+    return;
+}
 
-    #if(RESOLUTION_TEST)
-        *value = lambda;
-    #endif
+__global__ void cooling_function_marcel(cudaTextureObject_t my_tex, float a0, double * a1, double * a2
+    , double * value
+    )
+{ 
+    float v0, v1, v4;
+    double ne_test, B_test, mu = 0.1 ;
+    // For the normalized version only.
+    const int nw = SIZEOF_H; //Number of H used to generate table
+    const int nx = SIZEOF_TE; //Number of te used to generate table
+    const int ny = SIZEOF_NE; //Number of ne used to generate table
+    const int nz = SIZEOF_B; //Number of Bmag used to generate table
+    //  v0 = (round((v0 - 3) * (nz - 1)/5) + 0.5)/nw; //scale_height
+    //  v1 = (round((v1 - 0) * (nz - 1)/10) + 0.5)/nz; // Bmag
+    //  v4 = ((round((v3 -2) * (nx - 1)/13) + 0.5) + round((v2 - 10) * (ny - 1)/15) * nx)/(nx * ny); //Te + ne
+    for (int i = 0; i < 20; i++) {
+        ne_test = a1[i]/(a0 * THOMSON_CGS);
+        for(int k = 0; k < 20; k++){
+                B_test = sqrt(2 * mu *BOLTZ_CGS* ne_test * a2[k]);
+                // v0 = (round((log10(a0) - 3.) * (nw - 1.)/5.) + 0.5)/nw;
+                // v1 = (round((log10(ne_test) - 10.) * (ny - 1.)/15.) + 0.5 + round((log10(B_test) - 0.) * (nz - 1.)/10.) * ny)/(nz * ny);
+                // v4 = (round((log10(a2[k]) - 2.) * (nx - 1.)/13.) + 0.5)/nx;
+                v0 = (round((log10(a0) - 5.) * (nw - 1.)/3.) + 0.5)/nw;
+                v1 = (round((log10(ne_test) - 8.) * (ny - 1.)/15.) + 0.5 + round((log10(B_test) - 0.) * (nz - 1.)/10.) * ny)/(nz * ny);
+                v4 = (round((log10(a2[k]) - 2.) * (nx - 1.)/13.) + 0.5)/nx;
+                value[20*i + k] = tex3D<float>(my_tex, v4, v1, v0); 
+        }
+    }
     return;
 }
 
@@ -190,19 +217,28 @@ __global__ void cooling_function_test(cudaTextureObject_t my_tex, double * a0, d
 
         //printf("scale_height = %f, Bmag = %f, ne = %f, Te = %f\n", v0, v1, v2, v3);
 
-        v0 = (round((v0 - 3) * (nw - 1)/5) + 0.5)/nw; //scale_height
-        v1 = (round((v1 - 0) * (nz - 1)/10) + 0.5)/nz; // Bmag
-        v4 = ((round((v3 -2) * (nx - 1)/13) + 0.5) + round((v2 - 10) * (ny - 1)/15) * nx)/(nx * ny); //Te + ne
+        v0 = (round((v0 - 3.) * (nw - 1.)/5.) + 0.5)/nw;
+        v1 = (round((v2 - 10.) * (ny - 1.)/15.) + 0.5 + round((v1 - 0.) * (nz - 1.)/10.) * ny)/(nz * ny);
+        v4 = (round((v3 - 2.) * (nx - 1.)/13.) + 0.5)/nx;
 
         // //For the normalized version only.
         lambda = tex3D<float>(my_tex, v4, v1, v0); 
         //printf("lambda = %le\n", lambda);
-        if (fabsf(ucov[i] * DT * lambda)> 0.3 * fabsf(ug[i])){
-            lambda *= 0.3 * fabsf(ug[i])/(DT * fabsf(ucov[i] * lambda));
-        }
+        //if (fabsf(ucov[i] * DT * lambda)> 0.3 * fabsf(ug[i])){
+        //    lambda *= 0.3 * fabsf(ug[i])/(DT * fabsf(ucov[i] * lambda));
+        //}
         value[i] = lambda;
     }
     return;
+}
+void logspace(double start, double end, int num, double* result) {
+    double log_start = log10(start); //Initial value
+    double log_end = log10(end); //End value
+    double step = (log_end - log_start) / (num - 1); // number of steps
+    int i;
+    for (i = 0; i < num; ++i) {
+        result[i] = pow(10.0, log_start + i * step);
+    }
 }
 
 
@@ -211,6 +247,9 @@ int main()
     #if(SINGLE_TEST)
         float read0, read1, read2, read3;
         float loop = 100;
+        float * value;
+        value = (float*)malloc(sizeof(float));
+
         char str[1];
         CreateTexture();
         while (loop > 1)
@@ -272,10 +311,10 @@ int main()
         file_temperature_test = fopen("electronic_temperature_sim.txt", "r");
         FILE *file_mag_field_test;
         file_mag_field_test = fopen("magnetic_field_sim.txt", "r");
-        FILE *file_ucov_test;
-        file_ucov_test = fopen("ucov_sim.txt", "r");
-        FILE *file_ug_test;
-        file_ug_test = fopen("ug_sim.txt", "r");
+        //FILE *file_ucov_test;
+        //file_ucov_test = fopen("ucov_sim.txt", "r");
+        //FILE *file_ug_test;
+        //file_ug_test = fopen("ug_sim.txt", "r");
         CreateTexture();
         for (i = 0; fscanf(file_height_test, "%lf", H_test + i) == 1; i++) {
             // Do nothing inside the loop body, everything is done in the for loop header
@@ -289,18 +328,18 @@ int main()
         for (i = 0; fscanf(file_temperature_test, "%lf", Te_test + i) == 1; i++) {
             // Do nothing inside the loop body, everything is done in the for loop header
         }
-        for (i = 0; fscanf(file_ug_test, "%lf", ucov_test + i) == 1; i++) {
-            // Do nothing inside the loop body, everything is done in the for loop header
-        }
-        for (i = 0; fscanf(file_ucov_test, "%lf", ug_test + i) == 1; i++) {
-            // Do nothing inside the loop body, everything is done in the for loop header
-        }
+        // for (i = 0; fscanf(file_ug_test, "%lf", ucov_test + i) == 1; i++) {
+        //     // Do nothing inside the loop body, everything is done in the for loop header
+        // }
+        // for (i = 0; fscanf(file_ucov_test, "%lf", ug_test + i) == 1; i++) {
+        //     // Do nothing inside the loop body, everything is done in the for loop header
+        // }
         cudaMemcpy(d_H_test, H_test, N_RESOLUTION * sizeof(double), cudaMemcpyHostToDevice);
         cudaMemcpy(d_B_test, B_test, N_RESOLUTION * sizeof(double), cudaMemcpyHostToDevice);
         cudaMemcpy(d_ne_test, ne_test, N_RESOLUTION * sizeof(double), cudaMemcpyHostToDevice);
         cudaMemcpy(d_Te_test, Te_test, N_RESOLUTION * sizeof(double), cudaMemcpyHostToDevice);
-        cudaMemcpy(d_ucov_test, ucov_test, N_RESOLUTION * sizeof(double), cudaMemcpyHostToDevice);
-        cudaMemcpy(d_ug_test, ug_test, N_RESOLUTION * sizeof(double), cudaMemcpyHostToDevice);
+        //cudaMemcpy(d_ucov_test, ucov_test, N_RESOLUTION * sizeof(double), cudaMemcpyHostToDevice);
+        //cudaMemcpy(d_ug_test, ug_test, N_RESOLUTION * sizeof(double), cudaMemcpyHostToDevice);
         printf("Reading and getting values from texture memory...\n");
 
         cooling_function_test<<<1, 1>>>(coolTexObj, d_H_test, d_B_test, d_ne_test, d_Te_test, d_ucov_test, d_ug_test, d_cool_test);
@@ -328,6 +367,40 @@ int main()
         fclose(file_temperature_test);
         fclose(file_mag_field_test);
         printf("Test Sucessfull\n");
+    #endif
+    #if (COMPARISON_MARCEL)
+        CreateTexture();
+        double *te_test, H = 0.1 * 1.483366675977058e6 * 30, *tau_test, *result;
+        double *tau_test_d, *te_test_d, *result_d;
+        cudaMalloc(&tau_test_d, 20 * sizeof(double));
+        cudaMalloc(&te_test_d, 20 * sizeof(double));
+        cudaMalloc(&result_d, 400 * sizeof(double));
+
+        tau_test = (double*)malloc(20 * sizeof(double)); // Allocate memory for tau_test on the host
+        te_test = (double*)malloc(20 * sizeof(double)); 
+        result = (double*)malloc(400 * sizeof(double)); 
+
+
+
+        double tau_start = 1.e-6, tau_end = 5.e2;
+        double te_start = 5.e4, te_end = 2.e11;
+        FILE *file_result;
+        file_result = fopen("marcel_comp.txt", "w");
+        logspace(tau_start, tau_end, 20, tau_test);
+        logspace(te_start, te_end, 20, te_test);
+        
+        cudaMemcpy(tau_test_d, tau_test, 20 * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(te_test_d, te_test, 20 * sizeof(double), cudaMemcpyHostToDevice);
+
+        cooling_function_marcel<<<1, 1>>>(coolTexObj, H, tau_test_d, te_test_d, result_d);
+        cudaMemcpy(result, result_d, 400 * sizeof(double), cudaMemcpyDeviceToHost);
+
+        for (int i = 0; i < 400; i++) {
+            fprintf(file_result, "%.8e,", pow(10.,result[i]));
+        }
+        fclose(file_result);
+        //free(te_test);
+        //free(tau_test);
     #endif
 
     return 0;

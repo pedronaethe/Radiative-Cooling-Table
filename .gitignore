@@ -21,3 +21,6 @@ compton_table.txt
 *.exp
 csynch_table.txt
 *.txt
+source_coulomb.txt
+cooling_singlevalue
+source_coulomb.txt

@@ -25,8 +25,8 @@
 #define BREMSTRAHLUNGTEST (0) //Generates a table for bremmstrahlung equation
 #define ABSORPTIONDEPTHTEST (0) //Generates a table with absorption values
 #define RECALCULATE_GRID_TEST (0)
-#define SINGLE_VALUE (0) // Individual value of every function for a certain quantity of parameters
-#define COMPARISON_MARCEL (1) //Compare plot A.1 of Marcel et al. 2018: A unified accretion-ejection paradigm for black hole X-ray binaries
+#define SINGLE_VALUE (1) // Individual value of every function for a certain quantity of parameters
+#define COMPARISON_MARCEL (0) //Compare plot A.1 of Marcel et al. 2018: A unified accretion-ejection paradigm for black hole X-ray binaries
 
 #define PARAMETER_H 32
 #define PARAMETER_B 32
@@ -55,7 +55,7 @@ void nrerror(char error_text[])
     fprintf(stderr,"Numerical Recipes run-time error...\n");
     fprintf(stderr,"%s\n",error_text);
     fprintf(stderr,"...now exiting to system...\n");
-    //exit(1);
+    exit(1);
 }
 double bessi0(double xbess)
 {
@@ -462,6 +462,7 @@ double secant_bounded(double (*func)(double, double, double, double, double), do
         //printf("rts = %le \n", rts);
         if (fabs(dx) < xacc || f == 0.0) return rts; //Convergence.
     }
+    printf("Error! H = %le, B = %le, ne = %le, Te = %le\n", scale_height, mag_field, edens, etemp);
     nrerror("Maximum number of iterations exceeded in rtsec");
     return 0.0; //Never get here.
 }
@@ -658,7 +659,7 @@ int main()
     }
 
     #if (COMPARISON_MARCEL)
-        double B_test, ne_test, *te_test, H = 0.1 * 1.e6 * 30, *tau_test, mu = 0.1, result;
+        double B_test, ne_test, *te_test, H = 0.01 * 1.483366675977058e6 * 5, *tau_test, mu = 0.1, result, P_rad;
         tau_test = malloc(20 * sizeof(double));
         te_test = malloc(20 * sizeof(double));
         double tau_start = 1.e-6, tau_end = 5.e2;
@@ -672,6 +673,8 @@ int main()
                 ne_test = tau_test[i]/(H * THOMSON_CGS);
                 B_test = sqrt(2 * mu *BOLTZ_CGS* ne_test * te_test[k]);
                 result = totalthincooling_rate(H, ne_test, te_test[k], B_test);
+                //P_rad = total_cooling(H, ne_test, te_test[k], B_test) * H/C_CGS * (total_optical_depth(H, ne_test, te_test[k], B_test) + 4./3.);
+                //result = P_rad/(BOLTZ_CGS* ne_test * te_test[k]);
                 fprintf(file_result, "%.8e, ", result);
 
             }
@@ -702,7 +705,7 @@ int main()
             //printf("o valor do H =:%le\n", scale_height(H, ne, te));
             printf("O valor do bremmstrahlung ee =:%le\n", bremmstrahlung_ee(ne, te));
             printf("O valor do bremmstrahlung ei =:%le\n", bremmstrahlung_ei(ne, te));
-            printf("O valor do bremmstrahlung total =:%le\n", bremmscooling_rate(ne, te));
+            printf("O valor do bremmstrahlung total =:%le\n", log10(bremmscooling_rate(ne, te)));
             printf("o valor da freq crit =: %.11e\n", crit_freq(H, ne, te, B));
             printf("o valor do rsync =: %le\n", rsync(H, ne, te, B));
             printf("o valor do comptonization factor =: %.11e\n", comptonization_factor_ny(H, ne, te, B));
@@ -896,7 +899,7 @@ int main()
         }
     #elif(RECALCULATE_GRID_TEST)
         FILE *file_result;
-        file_result = fopen("cooling_table_test.txt", "w");
+        file_result = fopen("cooling_test.txt", "w");
         FILE *file_height_test;
         file_height_test = fopen("scaleheight_sim.txt", "r");
         FILE *file_e_density_test;
@@ -911,7 +914,7 @@ int main()
             printf("Error Reading Files from test\n");
             exit(0);
         }
-        double H_test[33792], B_test[33792], ne_test[33792], Te_test[33792], cool_test;
+        double H_test[12600], B_test[12600], ne_test[12600], Te_test[12600], cool_test;
         for (i = 0; fscanf(file_height_test, "%lf", &H_test[i]) == 1; i++) {
             // Do nothing inside the loop body, everything is done in the for loop header
         }
@@ -925,7 +928,8 @@ int main()
             // Do nothing inside the loop body, everything is done in the for loop header
         }
         printf("Calculating the table in parallelized way. This can take a while...\n");
-        for (i = 0; i < 33792; i++) {
+        omp_set_num_threads(omp_get_num_threads());
+        for (i = 0; i < 12600; i++) {
             cool_test = log10(total_cooling(pow(10,H_test[i]), pow(10,ne_test[i]), pow(10,Te_test[i]), pow(10,B_test[i])));
             //printf("H = %le, B = %le, ne = %le, Te = %le, value = %.8e\n", H_test[i], B_test[i], ne_test[i], Te_test[i], cool_test);
             fprintf(file_result, "%.8e\n", cool_test);
