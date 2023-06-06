@@ -1,7 +1,7 @@
 # Cooling Table Generator and Test Scripts
 Author: Pedro Naethe Motta (pedronaethemotta@usp.br)
 
-This code generates a radiative cooling table following the equations from [Esin et al. 1996](https://ui.adsabs.harvard.edu/abs/1996ApJ...465..312E). The radiative cooling table depends on the parameters $H_T$, $B$, $T_e$, $n_e$ (local temperature scale height, magnetic field, electron temperature and electron number density) in CGS, using texture memory in CUDA. 
+This code generates a radiative cooling table following the equations from [Esin et al. 1996](https://ui.adsabs.harvard.edu/abs/1996ApJ...465..312E). The radiative cooling table depends on the parameters $H$, $B$, $T_e$, $n_e$ (scale height, magnetic field, electron temperature and electron number density) in CGS, using texture memory in CUDA. 
 
 This code also generates a coulomb collision lookup table following [Sadowski et al. 2017](https://doi.org/10.1093/mnras/stw3116). The coulomb collisions model depends on the parameters $n_e$, $T_i$ and $T_e$ (electron number density, ion temperature and electron temperature) in CGS, using texture memory in CUDA.
 
@@ -23,9 +23,9 @@ You'll see four ```.txt``` files inside the folder: scale_height.txt, mag.txt, n
 
 **Note: Please, becareful, if you wish to change the number of values for each parameters, for example, from 100 to 200, you need to change the other .c/.cu files as well because they were made for my case.**
 
-### 2. Compile cooling_table.c/cooling_table_threaded.c and run 
+### 2. Compile cooling_table.c/cooling_table_threaded.c/cooling_table_threaded_mpi.c and run 
 
-This will generate a .txt file containing a table $(32 \times 32 \times 32 \times 32)$ with parameters $H_T$, $B$, $n_e$ and $T_e$ and cooling values. The first line of the file indicates what each column represents. If you want, you can generate a table for each cooling component, you just have to activate the respective switch. Let's say you want to generate a individual table for the blackbody cooling, you have to adjust the switch as ```#define BLACKBODYTEST(1)```. If you want the total cooling table, just make sure that all the ```TEST``` switches are deactivated.
+This will generate a .txt file containing a table $(32 \times 32 \times 32 \times 32)$ with parameters $H$, $B$, $n_e$ and $T_e$ and cooling values. The first line of the file indicates what each column represents. If you want, you can generate a table for each cooling component, you just have to activate the respective switch. Let's say you want to generate a individual table for the blackbody cooling, you have to adjust the switch as ```#define BLACKBODYTEST(1)```. If you want the total cooling table, just make sure that all the ```TEST``` switches are deactivated.
 
 To compile cooling_table.c, type in the terminal:
 
@@ -48,6 +48,18 @@ To compile cooling_table_threaded.c, type in the terminal:
 To run, type:
 
 ```$./cooling_table_threaded```
+
+With respect to cooling_table_threaded_mpi.c: it uses MPI combined with OpenMP so you can divide the task of calculating the tables into multiple processes and threaded. This is useful if you are trying to compute very high resolution tables, for example $100^4$ elements. 
+
+To compile cooling_table_threaded_mpi.c, type in the terminal
+
+```$mpicc -o cooling_mpi cooling_table_threaded_mpi.c -lm -fopenmp```
+
+To run in computer with a single processor, you can divide into multiple processes by typing:
+
+```$mpirun -np <number_of_processes> ./cooling_mpi```
+
+It is useful to run this at clusters so you can take advantage of multiple processors. In this case, each job submission file will depend on the system. I suggest you look up the manual for the specific system and how to use MPI+OpenMP in it.
 
 ### 3. Compile coulomb_table.c and run
 
@@ -94,7 +106,7 @@ Below is a mini tutorial showing you how to find the cooling/coulomb value in th
 
 **The next line describes how the cooling_texture.cu handles the fetching. The case for the coulomb_texture.cu is analogous and won't be written here.**
 
-It is important to test whether texture memory is fetching the right values for different combination of the parameters. To do so you'll need to run cooling_texture.cu as described above. When you run the code, you'll automatically be asked to give values for $H_T$, $B_{mag}$, $n_e$ and $T_e$. Pick a value from the table and confirm that it's going to print a cooling value matching the cooling table.
+It is important to test whether texture memory is fetching the right values for different combination of the parameters. To do so you'll need to run cooling_texture.cu as described above. When you run the code, you'll automatically be asked to give values for $H$, $B_{mag}$, $n_e$ and $T_e$. Pick a value from the table and confirm that it's going to print a cooling value matching the cooling table.
 
 The code is also going to print the value of each coordinate in the texture grid. If you don't need this value, just ignore it. I put it there just for the sake of reference, in case one need to know which cell it is mapping onto.
 
