@@ -30,13 +30,12 @@
 #define SINGLE_VALUE (0) // Individual value of every function for a certain quantity of parameters
 #define COMPARISON_MARCEL (0) //Compare plot A.1 of Marcel et al. 2018: A unified accretion-ejection paradigm for black hole X-ray binaries
 
-#define PARAMETER_H (32)
-#define PARAMETER_B (32)
-#define PARAMETER_NE (32)
-#define PARAMETER_TE (32)
+#define PARAMETER_H (100)
+#define PARAMETER_B (100)
+#define PARAMETER_NE (100)
+#define PARAMETER_TE (100)
 
 #define INDEX (l + PARAMETER_TE * (k + PARAMETER_NE * (j + PARAMETER_B * i)))
-#define INDEX_LOCAL (l + PARAMETER_TE * (k + PARAMETER_NE * (j + PARAMETER_B * i-local_start)))
 
 /*Mass of the Black hole*/
 #define C_Mbh (10. * C_Msun)
@@ -640,7 +639,6 @@ int main(int argc, char** argv)
         local_size += remainder;
     }
 
-    //fprintf(stderr, "rank = %d, local_start = %d, local_size = %d, local_end = %d\n ", rank, local_start, local_size, local_end);
     double *cooling_values_local;
     cooling_values_local = (double *) malloc (PARAMETER_H * PARAMETER_B * PARAMETER_NE * PARAMETER_TE * sizeof(double));
     // Set all elements to 0
@@ -654,13 +652,13 @@ int main(int argc, char** argv)
         // Only rank 0 opens and reads the files
         fprintf(stderr,"Number of processes: %d \n", size);
         FILE *file_height;
-        file_height = fopen("scale_height.txt", "r");
+        file_height = fopen("scale_height_100.txt", "r");
         FILE *file_e_density;
-        file_e_density = fopen("ne.txt", "r");
+        file_e_density = fopen("ne_100.txt", "r");
         FILE *file_temperature;
-        file_temperature = fopen("te.txt", "r");
+        file_temperature = fopen("te_100.txt", "r");
         FILE *file_mag_field;
-        file_mag_field = fopen("mag.txt", "r");
+        file_mag_field = fopen("mag_100.txt", "r");
 
         if (file_height == NULL || file_e_density == NULL || file_temperature == NULL || file_mag_field == NULL) {
             printf("Error Reading File\n");
@@ -718,41 +716,27 @@ int main(int argc, char** argv)
             for (k = 0; k < PARAMETER_NE; k++) {
                 for (l = 0; l < PARAMETER_TE; l++) {
                     #if(BLACKBODYTEST)
-                    cooling_values_local[i- local_start][j][k][l] = log10(bbody(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
+                    cooling_values_local[INDEX] = log10(bbody(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
                     #elif(SYNCHROTRONTEST)
-                    cooling_values_local[i- local_start][j][k][l] = log10(rsync(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
+                    cooling_values_local[INDEX]= log10(rsync(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
                     #elif(C_SYNCHROTRONTEST)
-                    cooling_values_local[i- local_start][j][k][l] = log10(rsync(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])) * comptonization_factor_ny(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
+                    cooling_values_local[INDEX] = log10(rsync(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])) * comptonization_factor_ny(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
                     #elif(COMPTONTEST)
-                    cooling_values_local[i- local_start][j][k][l] = log10(comptonization_factor_ny(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
+                    cooling_values_local[INDEX] = log10(comptonization_factor_ny(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
                     #elif(BREMSTRAHLUNGTEST)
                     cooling_values_local[INDEX]= log10(bremmscooling_rate(pow(10,ne_values[k]), pow(10,Te_values[l])));
                     #elif(ABSORPTIONTEST)
-                    cooling_values_local[i- local_start][j][k][l] = log10(absoptical_depth(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
+                    cooling_values_local[INDEX] = log10(absoptical_depth(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
                     #else
-                    cooling_values_local[i- local_start][j][k][l] = log10(total_cooling(pow(10, H_values[i]), pow(10, ne_values[k]), pow(10, Te_values[l]), pow(10, B_values[j])));
+                    cooling_values_local[INDEX] = log10(total_cooling(pow(10, H_values[i]), pow(10, ne_values[k]), pow(10, Te_values[l]), pow(10, B_values[j])));
                     #endif
                 }
             }
         }
     }
-    MPI_Barrier(MPI_COMM_WORLD);  // Add a barrier synchronization point
 
-    // Gather local values from all processes into cooling_values_all on rank 0
-    // Gather all cooling values from different ranks
-    /*int *recvcounts = (int*)malloc(size * sizeof(int));
-    int *displs = (int*)malloc(size * sizeof(int));
-    int local_size_array[size];
-    // Calculate the sizes and displacements for each rank
-    for (int r = 0; r < size; r++) {
-        local_size_array[r] = PARAMETER_H / size;  // Equal division of elements
-        if (r == size - 1) {
-            local_size_array[r] += remainder;  // Add remainder to the last rank
-        }
-        recvcounts[r] = local_size_array[r] * PARAMETER_B * PARAMETER_NE * PARAMETER_TE;
-        displs[r] = ((r > 0) ? displs[r-1] + recvcounts[r-1] : 0);
-    }*/
-    //MPI_Allgatherv(&(cooling_values_local[0]), local_size_array[rank] * PARAMETER_B * PARAMETER_NE * PARAMETER_TE, MPI_DOUBLE, &(cooling_values_all[0]), recvcounts, displs, MPI_DOUBLE, MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);  // Add a barrier synchronization point
+    //bring all the values to the global array in rank 0 
     MPI_Reduce(cooling_values_local, cooling_values_all, PARAMETER_H * PARAMETER_B * PARAMETER_NE * PARAMETER_TE, MPI_DOUBLE, MPI_SUM, 0 ,MPI_COMM_WORLD);
     if (rank == 0) fprintf(stderr,"Writing down the table...\n");
     MPI_Barrier(MPI_COMM_WORLD);  // Add a barrier synchronization point

@@ -11,13 +11,13 @@ int main()
 	double v4 = 0;
 	double i = 0, j = 0, k = 0, l = 0;
     FILE *Fheight;
-    Fheight = fopen("scale_height.txt", "w");
+    Fheight = fopen("scale_height_100.txt", "w");
 	FILE *Ftemperature;
-	Ftemperature = fopen("te.txt", "w");
+	Ftemperature = fopen("te_100.txt", "w");
 	FILE *Feletronicdensity;
-	Feletronicdensity = fopen("ne.txt", "w");
+	Feletronicdensity = fopen("ne_100.txt", "w");
 	FILE *Fmag;
-	Fmag = fopen("mag.txt", "w");
+	Fmag = fopen("mag_100.txt", "w");
 
 	// If you want to generate the table for R, ne and Te out of the log space use the code below:
 	//
@@ -33,27 +33,27 @@ int main()
 	// {
 	// 	fprintf(Feletronicdensity, "%le\n", ne);
 	// }
-    while (i <= 31)
+    while (i <= 99)
     {
-        v1 = 3 + 5 * i/31;
+        v1 = 3 + 5 * i/99;
         fprintf(Fheight, "%.15f\n", v1);
         i = i + 1;
     }
-	while (k <= 31)
+	while (k <= 99)
 	{
-		v2 = 10 + 15 * k/31;
+		v2 = 2 + 23 * k/99;
 		fprintf(Feletronicdensity, "%.15f\n", v2);
 		k = k + 1;
 	}
-	while (j <= 31)
+	while (j <= 99)
 	{
-		v3 = 2 + 13 * j/31;
+		v3 = 2 + 13 * j/99;
 		fprintf(Ftemperature, "%.15f\n", v3);
 		j = j + 1;
 	}
-	while (l <= 31)
+	while (l <= 99)
 	{
-		v4 = 10 * l/31;
+		v4 = 10 * l/99;
 		fprintf(Fmag, "%.15f\n", v4);
 		l = l + 1;
 	}

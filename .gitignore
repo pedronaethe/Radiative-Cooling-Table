@@ -24,3 +24,5 @@ csynch_table.txt
 source_coulomb.txt
 cooling_singlevalue
 source_coulomb.txt
+.brems_table.txt.swp
+mpi
