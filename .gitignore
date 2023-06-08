@@ -26,3 +26,5 @@ cooling_singlevalue
 source_coulomb.txt
 .brems_table.txt.swp
 mpi
+Cooling_tests/brems_table.bin
+Cooling_tests/cooling_texture

@@ -25,15 +25,15 @@
 #define C_SYNCHROTRONTEST (0)// Generates a table for comptonized synchrotron equation
 #define COMPTONTEST (0) // Generates a table with the compton values
 #define BREMSTRAHLUNGTEST (1) //Generates a table for bremmstrahlung equation
-#define ABSORPTIONDEPTHTEST (0) //Generates a table with absorption values
+#define ABSORPTIONTEST (0) //Generates a table with absorption values
 #define RECALCULATE_GRID_TEST (0)
 #define SINGLE_VALUE (0) // Individual value of every function for a certain quantity of parameters
 #define COMPARISON_MARCEL (0) //Compare plot A.1 of Marcel et al. 2018: A unified accretion-ejection paradigm for black hole X-ray binaries
 
-#define PARAMETER_H (100)
-#define PARAMETER_B (100)
-#define PARAMETER_NE (100)
-#define PARAMETER_TE (100)
+#define PARAMETER_H (32)
+#define PARAMETER_B (32)
+#define PARAMETER_NE (32)
+#define PARAMETER_TE (32)
 
 #define INDEX (l + PARAMETER_TE * (k + PARAMETER_NE * (j + PARAMETER_B * i)))
 
@@ -624,10 +624,10 @@ int main(int argc, char** argv)
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-    int i, j, k, l;
+    double start_time, end_time, elapsed_time;
+    start_time = MPI_Wtime();
+    int i, j, k, l, flag;
     int local_start, local_end, local_size;
-    int flag;
     double H_values[PARAMETER_H], B_values[PARAMETER_B], ne_values[PARAMETER_NE], Te_values[PARAMETER_TE];
 
     local_size = PARAMETER_H / size;
@@ -638,6 +638,9 @@ int main(int argc, char** argv)
         local_end += remainder;
         local_size += remainder;
     }
+
+    if(rank ==0) fprintf(stderr,"Number of processes: %d \n", size);
+    fprintf(stderr, "rank = %d, local_size =%d\n", rank, local_size);
 
     double *cooling_values_local;
     cooling_values_local = (double *) malloc (PARAMETER_H * PARAMETER_B * PARAMETER_NE * PARAMETER_TE * sizeof(double));
@@ -650,7 +653,6 @@ int main(int argc, char** argv)
 
     if (rank == 0) {
         // Only rank 0 opens and reads the files
-        fprintf(stderr,"Number of processes: %d \n", size);
         FILE *file_height;
         file_height = fopen("scale_height_100.txt", "r");
         FILE *file_e_density;
@@ -709,12 +711,16 @@ int main(int argc, char** argv)
     if(rank ==0)fprintf(stderr,"Calculating the cooling table in parallelized way. This can take a while...\n");
     #endif
 
-    omp_set_num_threads(omp_get_num_threads());
+    omp_set_num_threads(omp_get_max_threads()/size);
     #pragma omp parallel for collapse(4)
     for (i = local_start; i < local_end; i++) {
         for (j = 0; j < PARAMETER_B; j++) {
             for (k = 0; k < PARAMETER_NE; k++) {
                 for (l = 0; l < PARAMETER_TE; l++) {
+                    if (flag == 0) {
+                        printf("Rank %d, Thread %d out of %d threads_per_rank\n", rank,  (omp_get_thread_num()) , omp_get_max_threads());
+                        flag = 1; // Set flag to indicate message has been printed
+                    }
                     #if(BLACKBODYTEST)
                     cooling_values_local[INDEX] = log10(bbody(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
                     #elif(SYNCHROTRONTEST)
@@ -734,6 +740,9 @@ int main(int argc, char** argv)
             }
         }
     }
+    end_time = MPI_Wtime();
+    elapsed_time = end_time - start_time;
+    fprintf(stderr, "Rank %d: Elapsed time: %.2f seconds for calculation of the table components\n", rank, elapsed_time);
 
     MPI_Barrier(MPI_COMM_WORLD);  // Add a barrier synchronization point
     //bring all the values to the global array in rank 0 
@@ -744,27 +753,28 @@ int main(int argc, char** argv)
     if(rank ==0){
         FILE *file_result;
         #if(BLACKBODYTEST)
-        file_result = fopen("bbody_table.txt", "w");
+        file_result = fopen("bbody_table.bin", "w");
         #elif(SYNCHROTRONTEST)
-        file_result = fopen("synch_table.txt", "w");
+        file_result = fopen("synch_table.bin", "w");
         #elif(C_SYNCHROTRONTEST)
-        file_result = fopen("C_synch_table.txt", "w");
+        file_result = fopen("C_synch_table.bin", "w");
         #elif(COMPTONTEST)
-        file_result = fopen("compton_table.txt", "w");
+        file_result = fopen("compton_table.bin", "w");
         #elif(BREMSTRAHLUNGTEST)
-        file_result = fopen("brems_table.txt", "w");
+        file_result = fopen("brems_table.bin", "w");
         #elif(ABSORPTIONTEST)
-        file_result = fopen("tau_table.txt", "w");
+        file_result = fopen("tau_table.bin", "w");
         #else
-        file_result = fopen("cooling_table.txt", "w");
+        file_result = fopen("cooling_table.bin", "w");
         #endif
-        fprintf(file_result, "scale_height, mag_field, e_density, temperature, cooling\n");
-        // run for logarithm values
+        //fprintf(file_result, "scale_height, mag_field, e_density, temperature, cooling\n"); //code used to write in .txt file
         for (i = 0; i < PARAMETER_H; i++) {
             for (j = 0; j < PARAMETER_B; j++) {
                 for (k = 0; k < PARAMETER_NE; k++) {
                     for (l = 0; l < PARAMETER_TE; l++) {
-                        fprintf(file_result, "%.2f, %.2f, %.2f, %.2f, %.8e\n", H_values[i], B_values[j], ne_values[k], Te_values[l], cooling_values_all[INDEX]);
+                        //fprintf(file_result, "%.2f, %.2f, %.2f, %.2f, %.8e\n", H_values[i], B_values[j], ne_values[k], Te_values[l], cooling_values_all[INDEX]); //code used to write in .txt file
+                        fwrite(&cooling_values_all[INDEX], sizeof(double), 1, file_result); // Write cooling_values_all array
+
                     }
                 }
             }
@@ -776,7 +786,7 @@ int main(int argc, char** argv)
 
     if(rank == 0) free(cooling_values_all);
     free(cooling_values_local);
-    printf("Table created sucessfully! Exitting...\n");
+    if(rank ==0) printf("Table created sucessfully! Exitting...\n");
 
     return 0;
 }
