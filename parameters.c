@@ -13,9 +13,9 @@ int main()
     FILE *Fheight;
     Fheight = fopen("scale_height_100.txt", "w");
 	FILE *Ftemperature;
-	Ftemperature = fopen("te_100.txt", "w");
+	Ftemperature = fopen("te_200.txt", "w");
 	FILE *Feletronicdensity;
-	Feletronicdensity = fopen("ne_100.txt", "w");
+	Feletronicdensity = fopen("ne_200.txt", "w");
 	FILE *Fmag;
 	Fmag = fopen("mag_100.txt", "w");
 
@@ -39,16 +39,16 @@ int main()
         fprintf(Fheight, "%.15f\n", v1);
         i = i + 1;
     }
-	while (k <= 99)
+	while (k <= 200)
 	{
-		v2 = 2 + 23 * k/99;
-		fprintf(Feletronicdensity, "%.15f\n", v2);
+		v2 = 2 + 23 * k/200;
+		fprintf(Feletronicdensity, "%.7f\n", v2);
 		k = k + 1;
 	}
-	while (j <= 99)
+	while (j <= 200)
 	{
-		v3 = 2 + 13 * j/99;
-		fprintf(Ftemperature, "%.15f\n", v3);
+		v3 = 2 + 13 * j/200;
+		fprintf(Ftemperature, "%.7f\n", v3);
 		j = j + 1;
 	}
 	while (l <= 99)

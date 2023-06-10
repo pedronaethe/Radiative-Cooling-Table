@@ -18,24 +18,29 @@
 #define C_G (6.67259e-8)             /*Gravitational constant*/
 #define C_Msun (1.998e33)              /*Sun mass*/
 #define THOMSON_CGS (6.652e-25)    /*Thomson cross section*/
+#define ME_CGS (9.1094e-28) /*Mass hydrogen molecule*/
+
 
 /*battery of tests, for normal table generation, just put everything equals to 0*/
 #define BLACKBODYTEST (0) //Generates a table for the blackbody equation
 #define SYNCHROTRONTEST (0) //Generates a table for synchrotron equation
 #define C_SYNCHROTRONTEST (0)// Generates a table for comptonized synchrotron equation
 #define COMPTONTEST (0) // Generates a table with the compton values
-#define BREMSTRAHLUNGTEST (1) //Generates a table for bremmstrahlung equation
+#define BREMSTRAHLUNGTEST (0) //Generates a table for bremmstrahlung equation
 #define ABSORPTIONTEST (0) //Generates a table with absorption values
+#define COULOMBTEST (1)
 #define RECALCULATE_GRID_TEST (0)
 #define SINGLE_VALUE (0) // Individual value of every function for a certain quantity of parameters
 #define COMPARISON_MARCEL (0) //Compare plot A.1 of Marcel et al. 2018: A unified accretion-ejection paradigm for black hole X-ray binaries
 
-#define PARAMETER_H (32)
-#define PARAMETER_B (32)
-#define PARAMETER_NE (32)
-#define PARAMETER_TE (32)
+#define PARAMETER_H (201)
+#define PARAMETER_B (201)
+#define PARAMETER_NE (201)
+#define PARAMETER_TE (201)
 
 #define INDEX (l + PARAMETER_TE * (k + PARAMETER_NE * (j + PARAMETER_B * i)))
+#define INDEX_COULOMB (k + PARAMETER_TE * (j + PARAMETER_TE * i))
+
 
 /*Mass of the Black hole*/
 #define C_Mbh (10. * C_Msun)
@@ -617,6 +622,68 @@ void logspace(double start, double end, int num, double* result) {
     }
 }
 
+double theta_i(double itemp)
+{
+    double result = (BOLTZ_CGS)* itemp / ((MH_CGS) * (pow(C_CGS, 2.)));
+    return result;
+}
+
+
+double coulomb_heating(double etemp, double itemp, double edens)
+{
+    double coeff, th_sum, th_mean, result, K2i, K2e, K0, K1;  
+    double theta_min = 1.e-2;
+    double coulog = 20.;   // Coulomb logarithm ( ln Lambda )
+    double Theta_i = theta_i(itemp);
+    double Theta_e = thetae(etemp); 
+	coeff = 1.5 * ME_CGS / MH_CGS * coulog * C_CGS * BOLTZ_CGS * THOMSON_CGS;
+    coeff *= pow(edens, 2.) * (itemp - etemp);
+    //printf("coef = %.2e \n", coeff);
+    th_sum = thetae(etemp) + theta_i(itemp);
+	th_mean = thetae(etemp) * theta_i(itemp) / (thetae(etemp) + theta_i(itemp));
+    if (Theta_i < theta_min && Theta_e < theta_min) // approximated equations at small theta
+	{
+		result = coeff / sqrt(0.5 * C_PI * th_sum * th_sum * th_sum) * (2. * th_sum * th_sum + 2. * th_sum + 1.);
+        // printf("Oii\n");
+        // printf("result= %.2e \n", result);
+        // printf("coeff= %.2e \n", coeff);
+        // printf("th_sum = %.2e \n", th_sum);
+        // printf("th_mean = %.2e \n", th_mean);
+        // printf("Theta_e = %.2e \n", Theta_e);
+        // printf("Theta_i = %.2e \n", Theta_i);
+	}
+	else if (Theta_i < theta_min)
+	{
+		//bessel function
+	    //printf("Oii-2\n");
+		K2e = bessk2(1. / Theta_e);
+		result = coeff / K2e / exp(1. / Theta_e) * sqrt(Theta_e) / sqrt(th_sum * th_sum * th_sum) * (2. * th_sum * th_sum + 2. * th_sum + 1.);
+    }
+	else if (Theta_e < theta_min)
+	{
+		//bessel function
+		K2i = bessk2(1. / Theta_i);
+	    //printf("Oii-3\n");
+		result = coeff / K2i / exp(1. / Theta_i) * sqrt(Theta_i) / sqrt(th_sum * th_sum * th_sum) * (2. * th_sum * th_sum + 2. * th_sum + 1.);
+	}
+	else // general form in Sadowski+17 (eq 20)
+	{
+	    //printf("Oii-4 \n");
+		//bessel functions
+		K2e = bessk2(1. / Theta_e);
+		K2i = bessk2(1. / Theta_i);
+		K0 = bessk0(1.0 / th_mean);
+		K1 = bessk1(1.0 / th_mean);
+
+		result = coeff / (K2e * K2i) * ((2. * th_sum * th_sum + 1.) / th_sum * K1 + 2. * K0);
+	}
+	//if (!isfinite(result)) result = 0.;
+    //printf("result far = %.2e\n", result);
+
+	return (result);
+
+}
+
 int main(int argc, char** argv)
 {
 
@@ -630,6 +697,16 @@ int main(int argc, char** argv)
     int local_start, local_end, local_size;
     double H_values[PARAMETER_H], B_values[PARAMETER_B], ne_values[PARAMETER_NE], Te_values[PARAMETER_TE];
 
+    #if(COULOMBTEST)
+    local_size = PARAMETER_NE / size;
+    int remainder = PARAMETER_NE % size;
+    local_start = rank * local_size;
+    local_end = local_start + local_size;
+    if (rank == size - 1) {
+        local_end += remainder;
+        local_size += remainder;
+    }
+    #elif
     local_size = PARAMETER_H / size;
     int remainder = PARAMETER_H % size;
     local_start = rank * local_size;
@@ -638,10 +715,19 @@ int main(int argc, char** argv)
         local_end += remainder;
         local_size += remainder;
     }
+    #endif
 
     if(rank ==0) fprintf(stderr,"Number of processes: %d \n", size);
     fprintf(stderr, "rank = %d, local_size =%d\n", rank, local_size);
+    #if(COULOMBTEST)
+    double *coulomb_values_local;
+    coulomb_values_local = (double *) malloc (PARAMETER_NE * PARAMETER_TE * PARAMETER_TE * sizeof(double));
+    // Set all elements to 0
+    memset(coulomb_values_local, 0,  PARAMETER_NE * PARAMETER_TE * PARAMETER_TE * sizeof(double));
 
+    double *coulomb_values_all;
+    coulomb_values_all= (double *) malloc (PARAMETER_NE * PARAMETER_TE * PARAMETER_TE * sizeof(double));
+    #elif
     double *cooling_values_local;
     cooling_values_local = (double *) malloc (PARAMETER_H * PARAMETER_B * PARAMETER_NE * PARAMETER_TE * sizeof(double));
     // Set all elements to 0
@@ -649,10 +735,27 @@ int main(int argc, char** argv)
 
     double *cooling_values_all;
     cooling_values_all= (double *) malloc (PARAMETER_H * PARAMETER_B * PARAMETER_NE * PARAMETER_TE * sizeof(double));
-
+    #endif
 
     if (rank == 0) {
         // Only rank 0 opens and reads the files
+        #if (COULOMBTEST)
+        FILE *file_e_density;
+        file_e_density = fopen("ne_200.txt", "r");
+        FILE *file_temperature;
+        file_temperature = fopen("te_200.txt", "r");
+
+        for (i = 0; fscanf(file_e_density, "%lf", &ne_values[i]) == 1; i++) {
+            // Do nothing inside the loop body, everything is done in the for loop header
+        }
+        // Read Te_values
+        for (i = 0; fscanf(file_temperature, "%lf", &Te_values[i]) == 1; i++) {
+            // Do nothing inside the loop body, everything is done in the for loop header
+        }
+        fclose(file_e_density);
+        fclose(file_temperature);
+
+        #elif
         FILE *file_height;
         file_height = fopen("scale_height_100.txt", "r");
         FILE *file_e_density;
@@ -661,6 +764,7 @@ int main(int argc, char** argv)
         file_temperature = fopen("te_100.txt", "r");
         FILE *file_mag_field;
         file_mag_field = fopen("mag_100.txt", "r");
+
 
         if (file_height == NULL || file_e_density == NULL || file_temperature == NULL || file_mag_field == NULL) {
             printf("Error Reading File\n");
@@ -687,13 +791,19 @@ int main(int argc, char** argv)
         fclose(file_e_density);
         fclose(file_temperature);
         fclose(file_mag_field);
+        #endif
     }
 
     // Broadcast parameter values to all ranks
+    #if(COULOMBTEST)
+    MPI_Bcast(ne_values, PARAMETER_NE, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(Te_values, PARAMETER_TE, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    #elif
     MPI_Bcast(H_values, PARAMETER_H, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Bcast(B_values, PARAMETER_B, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Bcast(ne_values, PARAMETER_NE, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Bcast(Te_values, PARAMETER_TE, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    #endif
 
     #if(BLACKBODYTEST)
     if(rank ==0)fprintf(stderr,"Calculating the bbody table in parallelized way. This can take a while...\n");
@@ -707,10 +817,30 @@ int main(int argc, char** argv)
     if(rank ==0)fprintf(stderr,"Calculating the bremms table in parallelized way. This can take a while...\n");
     #elif(ABSORPTIONTEST)
     if(rank ==0)fprintf(stderr,"Calculating the tau table in parallelized way. This can take a while...\n");
+    #elif(COULOMBTEST)
+    if(rank ==0)fprintf(stderr,"Calculating the coulomb table in parallelized way. This can take a while...\n");
     #else
     if(rank ==0)fprintf(stderr,"Calculating the cooling table in parallelized way. This can take a while...\n");
     #endif
 
+
+    #if(COULOMBTEST)
+    omp_set_num_threads(omp_get_max_threads()/size);
+    #pragma omp parallel for collapse(3)
+    for (i = local_start; i < local_end; i++) {
+        for (j = 0; j < PARAMETER_TE; j++) {
+            for (k = 0; k < PARAMETER_TE; k++) {
+                    if (flag == 0) {
+                        printf("Rank %d, Thread %d out of %d threads_per_rank\n", rank,  (omp_get_thread_num()) , omp_get_max_threads());
+                        flag = 1; // Set flag to indicate message has been printed
+                    }
+                    coulomb_values_local[INDEX_COULOMB] = coulomb_heating(pow(10,Te_values[k]), pow(10,Te_values[j]), pow(10,ne_values[i]));
+                    //printf("ne_values = %lf, Ti_values = %lf, Te_values = %lf, coulomb = %lf\n", ne_values[i], Te_values[j], Te_values[k], coulomb_values_local[INDEX_COULOMB]);
+            }
+        }
+    }
+
+    #elif
     omp_set_num_threads(omp_get_max_threads()/size);
     #pragma omp parallel for collapse(4)
     for (i = local_start; i < local_end; i++) {
@@ -740,13 +870,18 @@ int main(int argc, char** argv)
             }
         }
     }
+    #endif
     end_time = MPI_Wtime();
     elapsed_time = end_time - start_time;
     fprintf(stderr, "Rank %d: Elapsed time: %.2f seconds for calculation of the table components\n", rank, elapsed_time);
 
     MPI_Barrier(MPI_COMM_WORLD);  // Add a barrier synchronization point
     //bring all the values to the global array in rank 0 
+    #if(COULOMBTEST)
+    MPI_Reduce(coulomb_values_local, coulomb_values_all, PARAMETER_NE * PARAMETER_TE* PARAMETER_TE, MPI_DOUBLE, MPI_SUM, 0 ,MPI_COMM_WORLD);
+    #elif
     MPI_Reduce(cooling_values_local, cooling_values_all, PARAMETER_H * PARAMETER_B * PARAMETER_NE * PARAMETER_TE, MPI_DOUBLE, MPI_SUM, 0 ,MPI_COMM_WORLD);
+    #endif
     if (rank == 0) fprintf(stderr,"Writing down the table...\n");
     MPI_Barrier(MPI_COMM_WORLD);  // Add a barrier synchronization point
     
@@ -764,9 +899,22 @@ int main(int argc, char** argv)
         file_result = fopen("brems_table.bin", "w");
         #elif(ABSORPTIONTEST)
         file_result = fopen("tau_table.bin", "w");
+        #elif(COULOMBTEST)
+        file_result = fopen("coulomb_table.bin", "w");
         #else
         file_result = fopen("cooling_table.bin", "w");
         #endif
+        #if(COULOMBTEST)
+        //fprintf(file_result, " e_density, temperature_i, temperature_e , coulomb\n"); //code used to write in .txt file
+        for (i = 0; i < PARAMETER_NE; i++) {
+            for (j = 0; j < PARAMETER_TE; j++) {
+                for (k = 0; k < PARAMETER_TE; k++) {
+                    //fprintf(file_result, "%.2f, %.2f, %.2f, %.8e\n", ne_values[i], Te_values[j], Te_values[k], coulomb_values_all[INDEX_COULOMB]); //code used to write in .txt file
+                    fwrite(&coulomb_values_all[INDEX_COULOMB], sizeof(double), 1, file_result); // Write cooling_values_all array
+                }
+            }
+        }
+        #elif
         //fprintf(file_result, "scale_height, mag_field, e_density, temperature, cooling\n"); //code used to write in .txt file
         for (i = 0; i < PARAMETER_H; i++) {
             for (j = 0; j < PARAMETER_B; j++) {
@@ -779,13 +927,18 @@ int main(int argc, char** argv)
                 }
             }
         }
+        #endif
         fclose(file_result);
     }
     MPI_Barrier(MPI_COMM_WORLD);  // Add a barrier synchronization point
     MPI_Finalize();
-
+    #if(COULOMBTEST)
+    if(rank == 0) free(coulomb_values_all);
+    free(coulomb_values_local);
+    #elif
     if(rank == 0) free(cooling_values_all);
     free(cooling_values_local);
+    #endif
     if(rank ==0) printf("Table created sucessfully! Exitting...\n");
 
     return 0;

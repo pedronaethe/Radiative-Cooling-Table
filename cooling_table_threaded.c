@@ -16,6 +16,7 @@
 #define C_G (6.67259e-8)             /*Gravitational constant*/
 #define C_Msun (1.998e33)              /*Sun mass*/
 #define THOMSON_CGS (6.652e-25)    /*Thomson cross section*/
+#define ME_CGS (9.1094e-28) /*Mass hydrogen molecule*/
 
 /*battery of tests, for normal table generation, just put everything equals to 0*/
 #define BLACKBODYTEST (0) //Generates a table for the blackbody equation
@@ -24,14 +25,16 @@
 #define COMPTONTEST (0) // Generates a table with the compton values
 #define BREMSTRAHLUNGTEST (0) //Generates a table for bremmstrahlung equation
 #define ABSORPTIONDEPTHTEST (0) //Generates a table with absorption values
-#define RECALCULATE_GRID_TEST (0)
-#define SINGLE_VALUE (1) // Individual value of every function for a certain quantity of parameters
+#define RECALCULATE_GRID_TEST (1)
+    #define COULOMB_RECALCULATE_GRID (1)
+#define SINGLE_VALUE (0) // Individual value of every function for a certain quantity of parameters]
+    #define COULOMB_TEST (0)
 #define COMPARISON_MARCEL (0) //Compare plot A.1 of Marcel et al. 2018: A unified accretion-ejection paradigm for black hole X-ray binaries
 
-#define PARAMETER_H 32
-#define PARAMETER_B 32
-#define PARAMETER_NE 32
-#define PARAMETER_TE 32
+#define PARAMETER_H 100
+#define PARAMETER_B 100
+#define PARAMETER_NE 200
+#define PARAMETER_TE 200
 
 /*Mass of the Black hole*/
 #define C_Mbh (10. * C_Msun)
@@ -613,6 +616,67 @@ void logspace(double start, double end, int num, double* result) {
     }
 }
 
+double theta_i(double itemp)
+{
+    double result = (BOLTZ_CGS)* itemp / ((MH_CGS) * (pow(C_CGS, 2.)));
+    return result;
+}
+
+
+double coulomb_heating(double etemp, double itemp, double edens)
+{
+    double coeff, th_sum, th_mean, result, K2i, K2e, K0, K1;  
+    double theta_min = 1.e-2;
+    double coulog = 20.;   // Coulomb logarithm ( ln Lambda )
+    double Theta_i = theta_i(itemp);
+    double Theta_e = thetae(etemp); 
+	coeff = 1.5 * ME_CGS / MH_CGS * coulog * C_CGS * BOLTZ_CGS * THOMSON_CGS;
+    coeff *= pow(edens, 2.) * (itemp - etemp);
+    //printf("coef = %.2e \n", coeff);
+    th_sum = thetae(etemp) + theta_i(itemp);
+	th_mean = thetae(etemp) * theta_i(itemp) / (thetae(etemp) + theta_i(itemp));
+    if (Theta_i < theta_min && Theta_e < theta_min) // approximated equations at small theta
+	{
+		result = coeff / sqrt(0.5 * C_PI * th_sum * th_sum * th_sum) * (2. * th_sum * th_sum + 2. * th_sum + 1.);
+        // printf("result= %.2e \n", result);
+        // printf("coeff= %.2e \n", coeff);
+        // printf("th_sum = %.2e \n", th_sum);
+        // printf("th_mean = %.2e \n", th_mean);
+        // printf("Theta_e = %.2e \n", Theta_e);
+        // printf("Theta_i = %.2e \n", Theta_i);
+	}
+	else if (Theta_i < theta_min)
+	{
+		//bessel function
+		K2e = bessk2(1. / Theta_e);
+		result = coeff / K2e / exp(1. / Theta_e) * sqrt(Theta_e) / sqrt(th_sum * th_sum * th_sum) * (2. * th_sum * th_sum + 2. * th_sum + 1.);
+    }
+	else if (Theta_e < theta_min)
+	{
+		//bessel function
+		K2i = bessk2(1. / Theta_i);
+		result = coeff / K2i / exp(1. / Theta_i) * sqrt(Theta_i) / sqrt(th_sum * th_sum * th_sum) * (2. * th_sum * th_sum + 2. * th_sum + 1.);
+	}
+	else // general form in Sadowski+17 (eq 20)
+	{
+		//bessel functions
+		K2e = bessk2(1. / Theta_e);
+		K2i = bessk2(1. / Theta_i);
+		K0 = bessk0(1.0 / th_mean);
+		K1 = bessk1(1.0 / th_mean);
+
+		result = coeff / (K2e * K2i) * ((2. * th_sum * th_sum + 1.) / th_sum * K1 + 2. * K0);
+	}
+	//if (!isfinite(result)) result = 0.;
+    //printf("result far = %.2e\n", result);
+
+	return (result);
+
+}
+
+
+
+
 int main()
 {
     int i,j,k,l = 0;
@@ -680,12 +744,25 @@ int main()
             }
         }
 
-    #elif(SINGLE_VALUE)
-        double H, B, ne, te;
+    #elif(SINGLE_VALUE || COULOMB_TEST)
+        double H, B, ne, te, ti;
         double loop = 100;
         char str[1];
         while (loop > 1)
-        {
+        {   
+            #if (COULOMB_TEST)
+            printf("Valor de edens\n");
+            scanf("%le", &ne);
+            ne = pow(10, ne);
+            printf ("valor de itemp\n");
+            scanf("%le", &ti);
+            ti= pow(10, ti);
+            printf ("valor de etemp\n");
+            scanf("%le", &te);
+            te= pow(10, te);
+            printf("Te = %f, Ti = %f, ne = %f\n", te, ti, ne);
+            printf("o valor do coulomb total é:%le\n", coulomb_heating(te, ti, ne));
+            #elif
             printf("valor do scale_height\n");
             scanf("%le", &H);
             H = pow(10, H);
@@ -716,6 +793,7 @@ int main()
             printf("o valor do cooling total =:%le\n", total_cooling(H, ne, te, B));
             printf("o valor do blackbody =:%le\n", bbody(H, ne, te, B));
             printf("o valor do cooling total em log:%le\n", log10(total_cooling(H, ne, te, B)));
+            #endif
             printf("Do you want to read other values? y/n\n");
             scanf("%s", str);
             if (strcmp(str, "n") == 0)
@@ -723,7 +801,7 @@ int main()
                 loop = 0;
             }
         }
-    #elif (BLACKBODYTEST)
+    #elif(BLACKBODYTEST)
         printf("Starting Black Body Table\n");
         FILE *file_result;
         file_result = fopen("bbody_table.txt", "w");
@@ -900,6 +978,8 @@ int main()
     #elif(RECALCULATE_GRID_TEST)
         FILE *file_result;
         file_result = fopen("cooling_test.txt", "w");
+        FILE *file_result_coulomb;
+        file_result_coulomb = fopen("coulomb_test.txt", "w");
         FILE *file_height_test;
         file_height_test = fopen("scaleheight_sim.txt", "r");
         FILE *file_e_density_test;
@@ -909,12 +989,31 @@ int main()
         FILE *file_mag_field_test;
         file_mag_field_test = fopen("magnetic_field_sim.txt", "r");
 
+
+        #if(COULOMB_RECALCULATE_GRID)
+        FILE *file_itemperature_test;
+        file_itemperature_test = fopen("ion_temperature_sim.txt", "r");
+        if (file_itemperature_test == NULL)
+        {
+            printf("Error Reading Files from test\n");
+            exit(0);
+        }
+        #endif
+
         if (file_height == NULL || file_e_density == NULL || file_temperature == NULL || file_mag_field == NULL)
         {
             printf("Error Reading Files from test\n");
             exit(0);
         }
-        double H_test[12600], B_test[12600], ne_test[12600], Te_test[12600], cool_test;
+        double H_test[72192], B_test[72192], ne_test[72192], Te_test[72192], cool_test;
+
+        #if(COULOMB_RECALCULATE_GRID)
+        double Ti_test[72192], coulomb_analy;
+        for (i = 0; fscanf(file_itemperature_test, "%lf", &Ti_test[i]) == 1; i++) {
+            // Do nothing inside the loop body, everything is done in the for loop header
+        }
+        #endif
+
         for (i = 0; fscanf(file_height_test, "%lf", &H_test[i]) == 1; i++) {
             // Do nothing inside the loop body, everything is done in the for loop header
         }
@@ -929,8 +1028,15 @@ int main()
         }
         printf("Calculating the table in parallelized way. This can take a while...\n");
         omp_set_num_threads(omp_get_num_threads());
-        for (i = 0; i < 12600; i++) {
+        for (i = 0; i < 72192; i++) {
             cool_test = log10(total_cooling(pow(10,H_test[i]), pow(10,ne_test[i]), pow(10,Te_test[i]), pow(10,B_test[i])));
+
+            #if(COULOMB_RECALCULATE_GRID)
+            coulomb_analy = coulomb_heating(pow(10., Te_test[i]), pow(10., Ti_test[i]), pow(10., ne_test[i]));
+            //printf("ne = %lf, ti = %lf, te = %lf, coulomb = %le\n", ne_test[i], Ti_test[i], Te_test[i], coulomb_analy);
+            fprintf(file_result_coulomb, "%.8e\n", coulomb_analy);
+            #endif
+        
             //printf("H = %le, B = %le, ne = %le, Te = %le, value = %.8e\n", H_test[i], B_test[i], ne_test[i], Te_test[i], cool_test);
             fprintf(file_result, "%.8e\n", cool_test);
         } 
@@ -938,7 +1044,10 @@ int main()
         fclose(file_e_density_test);
         fclose(file_temperature_test);
         fclose(file_mag_field_test);
-
+        #if(COULOMB_RECALCULATE_GRID)
+        fclose(file_itemperature_test);
+        #endif
+        fclose(file_result_coulomb);
     #else
         printf("Starting Cooling Table\n");
         FILE *file_result;
@@ -972,21 +1081,20 @@ int main()
     fclose(file_height);
     fclose(file_e_density);
     fclose(file_temperature);
-
-    #if(!SINGLE_VALUE)
+    fclose(file_mag_field);
+    #if(!SINGLE_VALUE && !COULOMB_TEST)
         fclose(file_result);
     #endif
-    fclose(file_mag_field);
-    for (int i = 0; i < PARAMETER_B; i++) {
-        for (int j = 0; j < PARAMETER_NE; j++) {
-            for (int k = 0; k < PARAMETER_TE; k++) {
-                free(cooling_values[i][j][k]);
-            }
-            free(cooling_values[i][j]);
-        }
-        free(cooling_values[i]);
-    }
-    free(cooling_values);
+    // for (int i = 0; i < PARAMETER_B; i++) {
+    //     for (int j = 0; j < PARAMETER_NE; j++) {
+    //         for (int k = 0; k < PARAMETER_TE; k++) {
+    //             free(cooling_values[i][j][k]);
+    //         }
+    //         free(cooling_values[i][j]);
+    //     }
+    //     free(cooling_values[i]);
+    // }
+    // free(cooling_values);
     printf("Table created sucessfully! Exitting...\n");
 
     return 0;

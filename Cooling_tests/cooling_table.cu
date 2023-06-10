@@ -2,13 +2,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define SIZEOF_H 32
-#define SIZEOF_B 32
-#define SIZEOF_TE 32
-#define SIZEOF_NE 32
-#define N_RESOLUTION 23101440
-#define SINGLE_TEST (1)
-#define RESOLUTION_TEST (0)
+#define SIZEOF_H 100
+#define SIZEOF_B 100
+#define SIZEOF_TE 100
+#define SIZEOF_NE 100
+#define N_RESOLUTION 72192
+#define SINGLE_TEST (0)
+#define RESOLUTION_TEST (1)
 #define COMPARISON_MARCEL (0)
 #define DT 7.336005915070878e-07
 #define THOMSON_CGS (6.652e-25) 
@@ -35,7 +35,7 @@ void Load_Cooling_Tables(float *cooling_table)
 
 
     // Reading the cooling table
-    infile = fopen("brems_table.bin", "r");
+    infile = fopen("cooling_table_100.bin", "rb");
     
     if (infile == NULL)
     {
@@ -61,12 +61,16 @@ void Load_Cooling_Tables(float *cooling_table)
     fprintf(stderr, "Finished transfering .binary data to memory!\n");
     fclose(infile);
 
-    // Free arrays used to read in table data
     printf("Table Loaded!\n");
 
     return;
 }
 
+__device__ float roundTo6Decimals(float num) {
+    float multiplier = powf(10, 6);
+    printf("Number rounded = %f", roundf(num * multiplier) / multiplier);
+    return roundf(num * multiplier) / multiplier;
+}
 void CreateTexture(void)
 {
     float *cooling_table; //Device Array with cooling floats
@@ -100,7 +104,7 @@ void CreateTexture(void)
     texRes.res.array.array  = cuCoolArray;
     cudaTextureDesc     texDescr;
     memset(&texDescr, 0, sizeof(texDescr));
-    texDescr.normalizedCoords = true;
+    texDescr.normalizedCoords = false;
     texDescr.filterMode = cudaFilterModeLinear;
     texDescr.addressMode[0] = cudaAddressModeClamp;   // clamp
     texDescr.addressMode[1] = cudaAddressModeClamp;
@@ -114,7 +118,7 @@ void CreateTexture(void)
 __global__ void cooling_function(cudaTextureObject_t my_tex, float a0, float a1, float a2, float a3
     ,float* result
 ){
-    float v0, v1, v2, v3, v4;
+    float v0, v1, v4;
     double lambda;
     // For the normalized version only.
     const int nw = SIZEOF_H; //Number of H used to generate table
@@ -125,9 +129,13 @@ __global__ void cooling_function(cudaTextureObject_t my_tex, float a0, float a1,
     //  v1 = (round((v1 - 0) * (nz - 1)/10) + 0.5)/nz; // Bmag
     //  v4 = ((round((v3 -2) * (nx - 1)/13) + 0.5) + round((v2 - 10) * (ny - 1)/15) * nx)/(nx * ny); //Te + ne
 
-    v0 = (round((a0 - 5.) * (nw - 1.)/3.) + 0.5)/nw;
-    v1 = (round((a2 - 10.) * (ny - 1.)/15.) + 0.5 + round((a1 - 0.) * (nz - 1.)/10.) * ny)/(nz * ny);
-    v4 = (round((a3 - 2.) * (nx - 1.)/13.) + 0.5)/nx;
+    // v0 = (round((a0 - 3.) * (nw - 1.)/5)) + 0.5;
+    // v1 = (round((a2 - 2.) * (ny - 1.)/23.) + round((a1 - 0.) * (nz - 1.)/10.) * (ny)) + 0.5;
+    // v4 = (round((a3 - 2.) * (nx - 1.)/13.)) + 0.5;
+    v0 = (floor(((a0 - 5.) > 0? a0 - 5. : 0) * (nw - 1.)/3.) + 0.5);
+    v1 = (floor(((a2 - 2.) > 0? a2 - 2. : 0) * (ny - 1.)/23.) + floor((a1 - 0.) * (nz - 1.)/10.) * (ny) + 0.5);
+    v4 = (floor(((a3 - 2.) > 0? a3 - 2. : 0) * (nx - 1.)/13.) + 0.5);
+
     //For the non normalized version only.
     //lambda = tex3D<float>(coolTexObj, v3 + 0.5f, v2 + 0.5f, v1 + 0.5f); 
 
@@ -137,7 +145,7 @@ __global__ void cooling_function(cudaTextureObject_t my_tex, float a0, float a1,
     *result = lambda;
     #endif
     printf("Coordinates in texture grid:\n");
-    printf("Scale_height = %f, Bmag = %f, ne = %f, te = %f, ne+te = = %f\n", v0, v1, v2, v3, v4);
+    printf("Scale_height = %f, Bmag + ne = %f, te = = %f\n", v0, v1, v4);
     printf("Cooling value = %lf\n", lambda);
     return;
 }
@@ -190,9 +198,19 @@ __global__ void cooling_function_test(cudaTextureObject_t my_tex, double * a0, d
 
         //printf("scale_height = %f, Bmag = %f, ne = %f, Te = %f\n", v0, v1, v2, v3);
 
-        v0 = (round((v0 - 3.) * (nw - 1.)/5.) + 0.5)/nw;
-        v1 = (round((v2 - 10.) * (ny - 1.)/15.) + 0.5 + round((v1 - 0.) * (nz - 1.)/10.) * ny)/(nz * ny);
-        v4 = (round((v3 - 2.) * (nx - 1.)/13.) + 0.5)/nx;
+        // v0 = (floor((v0 - 3.) * (nw - 1.)/5) + 0.5);
+        // v1 = (floor((v2 - 2.) * (ny - 1.)/23.) + floor((v1 - 0.) * (nz - 1.)/10.) * (ny) + 0.5);
+        // v4 = (floor((v3 - 2.) * (nx - 1.)/13.)+ 0.5);
+
+        //Esse aqui deu certo para 32^4 finalmente pqp
+        // v0 = (floor(((v0 - 3.) > 0? v0 - 3. : 0) * (nw - 1.)/5.) + 0.5);
+        // v1 = (floor(((v2 - 10.) > 0? v2 - 10. : 0) * (ny - 1.)/15.) + floor((v1 - 0.) * (nz - 1.)/10.) * (ny) + 0.5);
+        // v4 = (floor(((v3 - 2.) > 0? v3 - 2. : 0) * (nx - 1.)/13.) + 0.5);
+
+        //Teste para o 100^4: FUNCIONOUUUUUUUU
+        v0 = (floor(((v0 - 5.) > 0? v0 - 5. : 0) * (nw - 1.)/3.) + 0.5);
+        v1 = (floor(((v2 - 2.) > 0? v2 - 2. : 0) * (ny - 1.)/23.) + floor((v1 - 0.) * (nz - 1.)/10.) * (ny) + 0.5);
+        v4 = (floor(((v3 - 2.) > 0? v3 - 2. : 0) * (nx - 1.)/13.) + 0.5);
 
         // //For the normalized version only.
         lambda = tex3D<float>(my_tex, v4, v1, v0); 
