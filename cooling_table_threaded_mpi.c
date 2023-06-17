@@ -28,15 +28,15 @@
 #define COMPTONTEST (0) // Generates a table with the compton values
 #define BREMSTRAHLUNGTEST (0) //Generates a table for bremmstrahlung equation
 #define ABSORPTIONTEST (0) //Generates a table with absorption values
-#define COULOMBTEST (1)
+#define COULOMBTEST (0)
 #define RECALCULATE_GRID_TEST (0)
-#define SINGLE_VALUE (0) // Individual value of every function for a certain quantity of parameters
+#define SINGLE_VALUE (1) // Individual value of every function for a certain quantity of parameters
 #define COMPARISON_MARCEL (0) //Compare plot A.1 of Marcel et al. 2018: A unified accretion-ejection paradigm for black hole X-ray binaries
 
-#define PARAMETER_H (201)
-#define PARAMETER_B (201)
-#define PARAMETER_NE (201)
-#define PARAMETER_TE (201)
+#define PARAMETER_H (33)
+#define PARAMETER_B (33)
+#define PARAMETER_NE (33)
+#define PARAMETER_TE (33)
 
 #define INDEX (l + PARAMETER_TE * (k + PARAMETER_NE * (j + PARAMETER_B * i)))
 #define INDEX_COULOMB (k + PARAMETER_TE * (j + PARAMETER_TE * i))
@@ -398,20 +398,9 @@ double thetae(double etemp)
     return result;
 }
 
-/*double scale_height(double radius, double edens, double etemp)
-{
-    double rho = edens * MH_CGS;
-    if(ARAD_CGS * pow(etemp, 3.)/(edens * BOLTZ_CGS) > 1.){
-	    return pow(ARAD_CGS * pow(etemp,4.)/(3 * rho * C_G * C_Mbh) ,1./2.) * pow(radius, 3./2.);
-    }
-    else{
-        return pow(BOLTZ_CGS * etemp/(MH_CGS * C_G * C_Mbh),1./2.) * pow(radius, 3./2.);
-    }
-}*/
-
-double f(double scale_height, double x, double edens, double etemp, double mag_field)
+double trans_f(double scale_height, double x, double edens, double etemp, double mag_field)
 {//All the function was checked step by step, seems to be working good.
-    if (thetae(etemp) < 0.03)
+    if (thetae(etemp) < 0.01)
     { 
         double pre_factor = 2.49 * pow(10., -10.) * 12. * C_PI * edens * scale_height / (mag_field) * 1 /(2 * pow(thetae(etemp), 5.)); 
         //printf("Prefactor1 = %le \n", pre_factor);
@@ -469,7 +458,9 @@ double secant_bounded(double (*func)(double, double, double, double, double), do
         rts += dx;
         f=(*func)(scale_height, rts, edens, etemp, mag_field);
         //printf("rts = %le \n", rts);
-        if (fabs(dx) < xacc || f == 0.0) return rts; //Convergence.
+        if (fabs(dx) < xacc || f == 0.0) {
+            return rts; //Convergence.
+        }
     }
     printf("Error! H = %le, B = %le, ne = %le, Te = %le\n", scale_height, mag_field, edens, etemp);
     nrerror("Maximum number of iterations exceeded in rtsec");
@@ -519,19 +510,18 @@ double bremmscooling_rate(double edens, double etemp)
 
 double crit_freq(double scale_height, double edens, double etemp, double mag_field)
 {//All the function was checked step by step, seems to be working good.
-    return (1.5) * (2.80 * pow(10.,6.) * mag_field) * pow(thetae(etemp), 2.) * secant_bounded(f,scale_height, edens, etemp, mag_field);
+    return (1.5) * (2.80 * pow(10.,6.) * mag_field) * pow(thetae(etemp), 2.) * secant_bounded(trans_f,scale_height, edens, etemp, mag_field);
 }
 
 /*Synchtron radiation calculation*/
 double rsync(double scale_height, double edens, double etemp, double mag_field)
 { //All the function was checked step by step, seems to be working good.
     double nuzero = 2.80 * pow(10., 6.) * mag_field;
-    //correcto
     double a1 = 2. / (3. * nuzero * pow(thetae(etemp), 2.));
     double a2 = 0.4 / pow(a1, 1. / 4.);
     double a3 = 0.5316 / pow(a1, 1. / 2.);
     double a4 = 1.8899 * pow(a1, 1. / 3.);
-    if (thetae(etemp) > 0.03)
+    if (thetae(etemp) > 0.01)
     {
         double self_abs = 2. * C_PI * BOLTZ_CGS * etemp * pow(crit_freq(scale_height, edens, etemp, mag_field), 3.) / (3. * scale_height * pow(C_CGS, 2.));
         double init_term2 =6.76 * pow(10., -28.) * edens / (bessk2(1. / thetae(etemp)) * pow(a1, 1. / 6.));
@@ -574,15 +564,53 @@ double comptonization_factor_ny(double scale_height, double edens, double etemp,
     double eta3 = -1 - log(prob)/log(A);
     double result = 1 + eta1* (1 - pow(eta2, eta3));
     if (eta2 > 1){
-        //printf("Compton formula not valid, exiting...");
+        printf("Narayan's Compton formula not valid, exiting...");
         //exit(1);
     }
     return result;
 }
 
+double comptonization_factor (double scale_height, double edens, double etemp, double mag_field){
+	double thompson_opticaldepth = 2 * edens * THOMSON_CGS * etemp;
+	double Afactor = 1 + 4 * thetae(etemp) + 16 * pow(thetae(etemp), 2.);
+	double maxfactor = 3 * BOLTZ_CGS * etemp/(PLANCK_CGS * crit_freq(scale_height, edens, etemp, mag_field));
+	double jm = log(maxfactor)/log(Afactor);
+	double s = thompson_opticaldepth + pow(thompson_opticaldepth, 2.);
+    double factor_1 = (1 - gammp(jm + 1, Afactor * s));
+    double factor_2 = maxfactor * gammp(jm +1, s);
+    if (factor_1 == 0){
+        double result = factor_2;
+        if (isnan(result)){
+            printf("O valor de thompson optical depth é%le\n", thompson_opticaldepth);
+            printf("O valor de Afactor é%le\n", Afactor);
+            printf("O valor de maxfactor é%le\n", maxfactor);
+            printf("O valor de jm é%le\n", jm);
+            printf("O valor de s é%le\n", s);
+            printf("O valor de gammp(As) é%le\n", gammp(jm + 1, Afactor * s));
+            printf("O valor de gammp(s) é%le\n", gammp(jm +1, s));
+            exit(1);
+        }
+        return result;
+    }
+    else{
+        double result = pow(M_E, s*(Afactor -1))*factor_1 + factor_2;
+        if (isnan(result)){
+            printf("O valor de thompson optical depth é%le\n", thompson_opticaldepth);
+            printf("O valor de Afactor é%le\n", Afactor);
+            printf("O valor de maxfactor é%le\n", maxfactor);
+            printf("O valor de jm é%le\n", jm);
+            printf("O valor de s é%le\n", s);
+            printf("O valor de gammp(As) é%le\n", gammp(jm + 1, Afactor * s));
+            printf("O valor de gammp(s) é%le\n", gammp(jm +1, s));
+            exit(1);
+        }
+        return result;
+    }
+}
+
 double totalthincooling_rate(double scale_height, double edens, double etemp, double mag_field)
 {//All the function was checked step by step, seems to be working good.
-    double result = bremmscooling_rate(edens, etemp) + rsync(scale_height, edens, etemp, mag_field) * comptonization_factor_ny(scale_height, edens, etemp, mag_field);
+    double result = bremmscooling_rate(edens, etemp) + rsync(scale_height, edens, etemp, mag_field) * comptonization_factor(scale_height, edens, etemp, mag_field);
     return result;
 }
 
@@ -644,18 +672,10 @@ double coulomb_heating(double etemp, double itemp, double edens)
     if (Theta_i < theta_min && Theta_e < theta_min) // approximated equations at small theta
 	{
 		result = coeff / sqrt(0.5 * C_PI * th_sum * th_sum * th_sum) * (2. * th_sum * th_sum + 2. * th_sum + 1.);
-        // printf("Oii\n");
-        // printf("result= %.2e \n", result);
-        // printf("coeff= %.2e \n", coeff);
-        // printf("th_sum = %.2e \n", th_sum);
-        // printf("th_mean = %.2e \n", th_mean);
-        // printf("Theta_e = %.2e \n", Theta_e);
-        // printf("Theta_i = %.2e \n", Theta_i);
 	}
 	else if (Theta_i < theta_min)
 	{
 		//bessel function
-	    //printf("Oii-2\n");
 		K2e = bessk2(1. / Theta_e);
 		result = coeff / K2e / exp(1. / Theta_e) * sqrt(Theta_e) / sqrt(th_sum * th_sum * th_sum) * (2. * th_sum * th_sum + 2. * th_sum + 1.);
     }
@@ -663,7 +683,6 @@ double coulomb_heating(double etemp, double itemp, double edens)
 	{
 		//bessel function
 		K2i = bessk2(1. / Theta_i);
-	    //printf("Oii-3\n");
 		result = coeff / K2i / exp(1. / Theta_i) * sqrt(Theta_i) / sqrt(th_sum * th_sum * th_sum) * (2. * th_sum * th_sum + 2. * th_sum + 1.);
 	}
 	else // general form in Sadowski+17 (eq 20)
@@ -677,8 +696,8 @@ double coulomb_heating(double etemp, double itemp, double edens)
 
 		result = coeff / (K2e * K2i) * ((2. * th_sum * th_sum + 1.) / th_sum * K1 + 2. * K0);
 	}
-	//if (!isfinite(result)) result = 0.;
-    //printf("result far = %.2e\n", result);
+	if (!isfinite(result)) result = 0.;
+    printf("Result in coulomb collisions is inf, setting it to 0");
 
 	return (result);
 
@@ -706,7 +725,7 @@ int main(int argc, char** argv)
         local_end += remainder;
         local_size += remainder;
     }
-    #elif
+    #else
     local_size = PARAMETER_H / size;
     int remainder = PARAMETER_H % size;
     local_start = rank * local_size;
@@ -727,7 +746,7 @@ int main(int argc, char** argv)
 
     double *coulomb_values_all;
     coulomb_values_all= (double *) malloc (PARAMETER_NE * PARAMETER_TE * PARAMETER_TE * sizeof(double));
-    #elif
+    #else
     double *cooling_values_local;
     cooling_values_local = (double *) malloc (PARAMETER_H * PARAMETER_B * PARAMETER_NE * PARAMETER_TE * sizeof(double));
     // Set all elements to 0
@@ -755,15 +774,15 @@ int main(int argc, char** argv)
         fclose(file_e_density);
         fclose(file_temperature);
 
-        #elif
+        #else
         FILE *file_height;
-        file_height = fopen("scale_height_100.txt", "r");
+        file_height = fopen("scale_height.txt", "r");
         FILE *file_e_density;
-        file_e_density = fopen("ne_100.txt", "r");
+        file_e_density = fopen("ne.txt", "r");
         FILE *file_temperature;
-        file_temperature = fopen("te_100.txt", "r");
+        file_temperature = fopen("te.txt", "r");
         FILE *file_mag_field;
-        file_mag_field = fopen("mag_100.txt", "r");
+        file_mag_field = fopen("mag.txt", "r");
 
 
         if (file_height == NULL || file_e_density == NULL || file_temperature == NULL || file_mag_field == NULL) {
@@ -798,7 +817,7 @@ int main(int argc, char** argv)
     #if(COULOMBTEST)
     MPI_Bcast(ne_values, PARAMETER_NE, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Bcast(Te_values, PARAMETER_TE, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    #elif
+    #else
     MPI_Bcast(H_values, PARAMETER_H, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Bcast(B_values, PARAMETER_B, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Bcast(ne_values, PARAMETER_NE, MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -840,7 +859,7 @@ int main(int argc, char** argv)
         }
     }
 
-    #elif
+    #else
     omp_set_num_threads(omp_get_max_threads()/size);
     #pragma omp parallel for collapse(4)
     for (i = local_start; i < local_end; i++) {
@@ -856,9 +875,9 @@ int main(int argc, char** argv)
                     #elif(SYNCHROTRONTEST)
                     cooling_values_local[INDEX]= log10(rsync(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
                     #elif(C_SYNCHROTRONTEST)
-                    cooling_values_local[INDEX] = log10(rsync(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])) * comptonization_factor_ny(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
+                    cooling_values_local[INDEX] = log10(rsync(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])) * comptonization_factor(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
                     #elif(COMPTONTEST)
-                    cooling_values_local[INDEX] = log10(comptonization_factor_ny(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
+                    cooling_values_local[INDEX] = log10(comptonization_factor(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
                     #elif(BREMSTRAHLUNGTEST)
                     cooling_values_local[INDEX]= log10(bremmscooling_rate(pow(10,ne_values[k]), pow(10,Te_values[l])));
                     #elif(ABSORPTIONTEST)
@@ -879,7 +898,7 @@ int main(int argc, char** argv)
     //bring all the values to the global array in rank 0 
     #if(COULOMBTEST)
     MPI_Reduce(coulomb_values_local, coulomb_values_all, PARAMETER_NE * PARAMETER_TE* PARAMETER_TE, MPI_DOUBLE, MPI_SUM, 0 ,MPI_COMM_WORLD);
-    #elif
+    #else
     MPI_Reduce(cooling_values_local, cooling_values_all, PARAMETER_H * PARAMETER_B * PARAMETER_NE * PARAMETER_TE, MPI_DOUBLE, MPI_SUM, 0 ,MPI_COMM_WORLD);
     #endif
     if (rank == 0) fprintf(stderr,"Writing down the table...\n");
@@ -914,14 +933,14 @@ int main(int argc, char** argv)
                 }
             }
         }
-        #elif
-        //fprintf(file_result, "scale_height, mag_field, e_density, temperature, cooling\n"); //code used to write in .txt file
+        #else
+        fprintf(file_result, "scale_height, mag_field, e_density, temperature, cooling\n"); //code used to write in .txt file
         for (i = 0; i < PARAMETER_H; i++) {
             for (j = 0; j < PARAMETER_B; j++) {
                 for (k = 0; k < PARAMETER_NE; k++) {
                     for (l = 0; l < PARAMETER_TE; l++) {
-                        //fprintf(file_result, "%.2f, %.2f, %.2f, %.2f, %.8e\n", H_values[i], B_values[j], ne_values[k], Te_values[l], cooling_values_all[INDEX]); //code used to write in .txt file
-                        fwrite(&cooling_values_all[INDEX], sizeof(double), 1, file_result); // Write cooling_values_all array
+                        fprintf(file_result, "%.2f, %.2f, %.2f, %.2f, %.8e\n", H_values[i], B_values[j], ne_values[k], Te_values[l], cooling_values_all[INDEX]); //code used to write in .txt file
+                        //fwrite(&cooling_values_all[INDEX], sizeof(double), 1, file_result); // Write cooling_values_all array
 
                     }
                 }
@@ -935,7 +954,7 @@ int main(int argc, char** argv)
     #if(COULOMBTEST)
     if(rank == 0) free(coulomb_values_all);
     free(coulomb_values_local);
-    #elif
+    #else
     if(rank == 0) free(cooling_values_all);
     free(cooling_values_local);
     #endif

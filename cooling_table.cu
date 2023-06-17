@@ -8,7 +8,7 @@
 #define SIZEOF_NE 32
 #define N_RESOLUTION 33792
 #define SINGLE_TEST (0)
-#define RESOLUTION_TEST (1)
+#define RESOLUTION_TEST (0)
 cudaTextureObject_t coolTexObj;
 cudaArray *cuCoolArray = 0;
 
@@ -201,7 +201,6 @@ __global__ void cooling_function_test(cudaTextureObject_t my_tex, double * a0, d
     }
     return;
 }
-
 
 int main()
 {

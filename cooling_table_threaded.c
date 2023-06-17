@@ -26,15 +26,15 @@
 #define BREMSTRAHLUNGTEST (0) //Generates a table for bremmstrahlung equation
 #define ABSORPTIONDEPTHTEST (0) //Generates a table with absorption values
 #define RECALCULATE_GRID_TEST (1)
-    #define COULOMB_RECALCULATE_GRID (1)
+    #define COULOMB_RECALCULATE_GRID (0)
 #define SINGLE_VALUE (0) // Individual value of every function for a certain quantity of parameters]
     #define COULOMB_TEST (0)
 #define COMPARISON_MARCEL (0) //Compare plot A.1 of Marcel et al. 2018: A unified accretion-ejection paradigm for black hole X-ray binaries
 
-#define PARAMETER_H 100
-#define PARAMETER_B 100
-#define PARAMETER_NE 200
-#define PARAMETER_TE 200
+#define PARAMETER_H 101
+#define PARAMETER_B 101
+#define PARAMETER_NE 101
+#define PARAMETER_TE 101
 
 /*Mass of the Black hole*/
 #define C_Mbh (10. * C_Msun)
@@ -392,20 +392,9 @@ double thetae(double etemp)
     return result;
 }
 
-/*double scale_height(double radius, double edens, double etemp)
-{
-    double rho = edens * MH_CGS;
-    if(ARAD_CGS * pow(etemp, 3.)/(edens * BOLTZ_CGS) > 1.){
-	    return pow(ARAD_CGS * pow(etemp,4.)/(3 * rho * C_G * C_Mbh) ,1./2.) * pow(radius, 3./2.);
-    }
-    else{
-        return pow(BOLTZ_CGS * etemp/(MH_CGS * C_G * C_Mbh),1./2.) * pow(radius, 3./2.);
-    }
-}*/
-
 double f(double scale_height, double x, double edens, double etemp, double mag_field)
 {//All the function was checked step by step, seems to be working good.
-    if (thetae(etemp) < 0.03)
+    if (thetae(etemp) < 0.01)
     { 
         double pre_factor = 2.49 * pow(10., -10.) * 12. * C_PI * edens * scale_height / (mag_field) * 1 /(2 * pow(thetae(etemp), 5.)); 
         //printf("Prefactor1 = %le \n", pre_factor);
@@ -463,7 +452,9 @@ double secant_bounded(double (*func)(double, double, double, double, double), do
         rts += dx;
         f=(*func)(scale_height, rts, edens, etemp, mag_field);
         //printf("rts = %le \n", rts);
-        if (fabs(dx) < xacc || f == 0.0) return rts; //Convergence.
+        if (fabs(dx) < xacc || f == 0.0) {
+            return rts; //Convergence.
+        }
     }
     printf("Error! H = %le, B = %le, ne = %le, Te = %le\n", scale_height, mag_field, edens, etemp);
     nrerror("Maximum number of iterations exceeded in rtsec");
@@ -513,7 +504,7 @@ double bremmscooling_rate(double edens, double etemp)
 
 double crit_freq(double scale_height, double edens, double etemp, double mag_field)
 {//All the function was checked step by step, seems to be working good.
-    return (1.5) * (2.80 * pow(10.,6.) * mag_field) * pow(thetae(etemp), 2.) * secant_bounded(f,scale_height, edens, etemp, mag_field);
+    return (1.5) * (2.79925 * pow(10.,6.) * mag_field) * pow(thetae(etemp), 2.) * secant_bounded(f,scale_height, edens, etemp, mag_field);
 }
 
 /*Synchtron radiation calculation*/
@@ -525,7 +516,7 @@ double rsync(double scale_height, double edens, double etemp, double mag_field)
     double a2 = 0.4 / pow(a1, 1. / 4.);
     double a3 = 0.5316 / pow(a1, 1. / 2.);
     double a4 = 1.8899 * pow(a1, 1. / 3.);
-    if (thetae(etemp) > 0.03)
+    if (thetae(etemp) > 0.01)
     {
         double self_abs = 2. * C_PI * BOLTZ_CGS * etemp * pow(crit_freq(scale_height, edens, etemp, mag_field), 3.) / (3. * scale_height * pow(C_CGS, 2.));
         double init_term2 =6.76 * pow(10., -28.) * edens / (bessk2(1. / thetae(etemp)) * pow(a1, 1. / 6.));
@@ -555,7 +546,7 @@ double rsync(double scale_height, double edens, double etemp, double mag_field)
 
 double soptical_depth(double scale_height, double edens, double etemp)
 {//All the function was checked step by step, seems to be working good.
-    double result = 2. * edens * THOMSON_CGS * scale_height;
+    double result =  2. * edens * THOMSON_CGS * scale_height;
     return result;
 }
 
@@ -574,9 +565,46 @@ double comptonization_factor_ny(double scale_height, double edens, double etemp,
     return result;
 }
 
+double comptonization_factor(double scale_height, double edens, double etemp, double mag_field){
+	double thompson_opticaldepth = 2 * edens * THOMSON_CGS * etemp;
+	double Afactor = 1 + 4 * thetae(etemp) + 16 * pow(thetae(etemp), 2.);
+	double maxfactor = 3 * BOLTZ_CGS * etemp/(PLANCK_CGS * crit_freq(scale_height, edens, etemp, mag_field));
+	double jm = log(maxfactor)/log(Afactor);
+	double s = thompson_opticaldepth + pow(thompson_opticaldepth, 2.);
+    double factor_1 = (1 - gammp(jm + 1, Afactor * s));
+    double factor_2 = maxfactor * gammp(jm +1, s);
+    if (factor_1 == 0){
+        double result = factor_2;
+        if (isnan(result)){
+            printf("O valor de thompson optical depth é%le\n", thompson_opticaldepth);
+            printf("O valor de Afactor é%le\n", Afactor);
+            printf("O valor de maxfactor é%le\n", maxfactor);
+            printf("O valor de jm é%le\n", jm);
+            printf("O valor de s é%le\n", s);
+            printf("O valor de gammp(As) é%le\n", gammp(jm + 1, Afactor * s));
+            printf("O valor de gammp(s) é%le\n", gammp(jm +1, s));
+            exit(1);
+        }
+        return result;
+    }
+    else{
+        double result = pow(M_E, s*(Afactor -1))*factor_1 + factor_2;
+        if (isnan(result)){
+            printf("O valor de thompson optical depth é%le\n", thompson_opticaldepth);
+            printf("O valor de Afactor é%le\n", Afactor);
+            printf("O valor de maxfactor é%le\n", maxfactor);
+            printf("O valor de jm é%le\n", jm);
+            printf("O valor de s é%le\n", s);
+            printf("O valor de gammp(As) é%le\n", gammp(jm + 1, Afactor * s));
+            printf("O valor de gammp(s) é%le\n", gammp(jm +1, s));
+            exit(1);
+        }
+        return result;
+    }
+}
 double totalthincooling_rate(double scale_height, double edens, double etemp, double mag_field)
 {//All the function was checked step by step, seems to be working good.
-    double result = bremmscooling_rate(edens, etemp) + rsync(scale_height, edens, etemp, mag_field) * comptonization_factor_ny(scale_height, edens, etemp, mag_field);
+    double result = bremmscooling_rate(edens, etemp) + rsync(scale_height, edens, etemp, mag_field) * comptonization_factor(scale_height, edens, etemp, mag_field);
     return result;
 }
 
@@ -762,7 +790,7 @@ int main()
             te= pow(10, te);
             printf("Te = %f, Ti = %f, ne = %f\n", te, ti, ne);
             printf("o valor do coulomb total é:%le\n", coulomb_heating(te, ti, ne));
-            #elif
+            #else
             printf("valor do scale_height\n");
             scanf("%le", &H);
             H = pow(10, H);
@@ -782,9 +810,10 @@ int main()
             //printf("o valor do H =:%le\n", scale_height(H, ne, te));
             printf("O valor do bremmstrahlung ee =:%le\n", bremmstrahlung_ee(ne, te));
             printf("O valor do bremmstrahlung ei =:%le\n", bremmstrahlung_ei(ne, te));
-            printf("O valor do bremmstrahlung total =:%le\n", log10(bremmscooling_rate(ne, te)));
+            printf("O valor do bremmstrahlung total =:%le\n", bremmscooling_rate(ne, te));
             printf("o valor da freq crit =: %.11e\n", crit_freq(H, ne, te, B));
             printf("o valor do rsync =: %le\n", rsync(H, ne, te, B));
+            printf("o valor do comptonization factor_ny =: %.11e\n", comptonization_factor_ny(H, ne, te, B));
             printf("o valor do comptonization factor =: %.11e\n", comptonization_factor_ny(H, ne, te, B));
             printf("o valor do cooling total no disco fino =:%le\n", totalthincooling_rate(H, ne, te, B));
             printf("O valor do tau_scat =:%le\n", soptical_depth(H, ne, te));
@@ -977,7 +1006,7 @@ int main()
         }
     #elif(RECALCULATE_GRID_TEST)
         FILE *file_result;
-        file_result = fopen("cooling_test.txt", "w");
+        file_result = fopen("cooling_test_finalfantasy.txt", "w");
         FILE *file_result_coulomb;
         file_result_coulomb = fopen("coulomb_test.txt", "w");
         FILE *file_height_test;

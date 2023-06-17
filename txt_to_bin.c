@@ -3,7 +3,7 @@
 #include <math.h>
 #include <stdlib.h>
 
-#define COULOMB (1)
+#define COULOMB (0)
 
 int main()
 {
@@ -19,8 +19,8 @@ int main()
 
 
     // Reading the cooling table
-    infile = fopen("coulomb_table.txt", "r");
-    file_result = fopen("coulomb_table.bin", "w");
+    infile = fopen("cooling_table_100_001.txt", "r");
+    file_result = fopen("cooling_table_100_001.bin", "w");
 
     
     if (infile == NULL)
