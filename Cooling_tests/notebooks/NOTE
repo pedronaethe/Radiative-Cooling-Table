@@ -1,2 +1,0 @@
-I made the notebooks directory so it can have a .gitignore file so that git doesn't track notebook files here.  
-If you put a notebook file here, include a "%cd .." at the first line so the notebook can successfully import sim.py. 
