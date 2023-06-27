@@ -11,7 +11,7 @@ I'm leaving a cooling_table.txt and source_coulomb.txt in the repository for com
 
 ### 1. Compile parameters_generator.c and run in order to generate four .txt files containing values for $B$, $n_e$, $T_e$ and $H_T$. 
 
-Standard code provides you 32 values for each. These are going to be the parameters used to generate the cooling/coulomb tables. To compile type in the terminal inside the folder:
+The standard code provides you with a certain quantity of values for each parameter. These are going to be the parameters used to generate the cooling/coulomb tables. To compile type in the terminal inside the folder:
 
 ```$gcc parameters.c -o parameters -lm```
 
@@ -19,13 +19,13 @@ To run:
 
 ```$./parameters$```
 
-You'll see four ```.txt``` files inside the folder: scale_height.txt, mag.txt, ne.txt and te.txt. These are the parameters list. For the coulomb table, I use the same table for $T_i$ and $T_e$, meaning they span the same interval.
+You'll see four ```.txt``` files inside the folder: scale_height.txt, mag.txt, ne.txt, and te.txt. These are the parameters list. For the coulomb table, I use the same table for $T_i$ and $T_e$, meaning they span the same interval.
 
-**Note: Please, becareful, if you wish to change the number of values for each parameters, for example, from 100 to 200, you need to change the other .c/.cu files as well because they were made for my case.**
+**Note: Please, be careful, if you wish to change the number of values for each parameter, for example, from 100 to 200, you need to change the other .c/.cu files as well because they were made for my case.**
 
 ### 2. Compile cooling_table_Open_MPI.c and run 
 
-This will generate a .txt file containing a table $(H_{\rm parameter} \times B_{\rm parameter} \times Ne_{\rm parameter} \times Te_{\rm parameter})$ with parameters $H$, $B$, $n_e$ and $T_e$ and cooling values in binary or txt file. If it's your first time working with this code, I suggest you print the txt file. If you want, you can generate a table for each cooling component, you just have to activate the respective switch. Let's say you want to generate a individual table for the blackbody cooling, you have to adjust the switch as ```#define BLACKBODYTEST(1)```. If you want the total cooling table, just make sure that all the ```TEST``` switches are deactivated.
+This will generate a .txt file containing a table $(H_{\rm parameter} \times B_{\rm parameter} \times Ne_{\rm parameter} \times Te_{\rm parameter})$ with parameters $H$, $B$, $n_e$ and $T_e$ and cooling values in binary or txt file. If it's your first time working with this code, I suggest you print the text files. If you want, you can generate a table for each cooling component, you just have to activate the respective switch. Let's say you want to generate an individual table for the blackbody cooling, you have to adjust the switch as ```#define BLACKBODYTEST(1)```. If you want the total cooling table, just make sure that all the ```TEST``` switches are deactivated.
 
 cooling_table_OpenMPI.c: it uses MPI combined with OpenMP so you can divide the task of calculating the tables into multiple processes and threaded. This is useful if you are trying to compute very high resolution tables, for example $100^4$ elements. 
 
