@@ -11,13 +11,13 @@ int main()
 	double v4 = 0;
 	double i = 0, j = 0, k = 0, l = 0;
     FILE *Fheight;
-    Fheight = fopen("scale_height.txt", "w");
+    Fheight = fopen("scale_height_33.txt", "w");
 	FILE *Ftemperature;
-	Ftemperature = fopen("te.txt", "w");
+	Ftemperature = fopen("te_33.txt", "w");
 	FILE *Feletronicdensity;
-	Feletronicdensity = fopen("ne.txt", "w");
+	Feletronicdensity = fopen("ne_33.txt", "w");
 	FILE *Fmag;
-	Fmag = fopen("mag.txt", "w");
+	Fmag = fopen("mag_33.txt", "w");
 
 	// If you want to generate the table for R, ne and Te out of the log space use the code below:
 	//

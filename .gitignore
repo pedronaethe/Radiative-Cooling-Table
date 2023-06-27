@@ -35,3 +35,4 @@ txt_to_bin
 txt_to_bin
 smalltablegenerator.cu
 max_min.c
+cuda_new

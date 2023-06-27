@@ -29,14 +29,14 @@
 #define BREMSTRAHLUNGTEST (0) //Generates a table for bremmstrahlung equation
 #define ABSORPTIONTEST (0) //Generates a table with absorption values
 #define COULOMBTEST (0) //Generates a table with coulomb values
-#define PRINT_BINARY (1) // Whether to print in binary or txt file
+#define PRINT_BINARY (0) // Whether to print in binary or txt file
 
 
 /*Switches to change between table generation and test, for table generation put everything 0*/
 #define RECALCULATE_GRID_TEST (0)/*Put simulation values for the 4 parameters and it will calculate*/
     #define COULOMB_RECALCULATE_GRID (0) // Do the same as RECALCULATE_GRID_TEST, but with coulomb, activate both.
-    #define N_RESOLUTION 72192 //Total number of cells from simulation.
-#define SINGLE_VALUE (0) //Individual value of every function for a defined quantity of parameters
+    #define N_RESOLUTION 12600 //Total number of cells from simulation.
+#define SINGLE_VALUE (1) //Individual value of every function for a defined quantity of parameters
     #define COULOMB_TEST (0) //Do the same as SINGLE_VALUE, but with coulomb, activate both.
 #define COMPARISON_MARCEL (0) //Compare plot A.1 of Marcel et al. 2018: A unified accretion-ejection paradigm for black hole X-ray binaries
 
@@ -56,7 +56,7 @@
 #define EPS (3e-7)
 #define maxSteps (1e3)
 #define FPMIN (1.0e-30) 
-
+#define INTEGRATION_STEPS (100000)
 
 double gammln(double xxgam);
 /*Standard Numerical Recipes error function*/
@@ -307,7 +307,7 @@ double thetae(double etemp)
 
 double trans_f(double scale_height, double x, double edens, double etemp, double mag_field)
 {//All the function was checked step by step, seems to be working good.
-    if (thetae(etemp) < 0.01)
+    if (thetae(etemp) < 0.5)
     { 
         double pre_factor = 2.49 * pow(10., -10.) * 12. * C_PI * edens * scale_height / (mag_field) * 1 /(2 * pow(thetae(etemp), 5.)); 
         //printf("Prefactor1 = %le \n", pre_factor);
@@ -431,7 +431,7 @@ double rsync(double scale_height, double edens, double etemp, double mag_field)
     double a2 = 0.4 / pow(a1, 1. / 4.);
     double a3 = 0.5316 / pow(a1, 1. / 2.);
     double a4 = 1.8899 * pow(a1, 1. / 3.);
-    if (thetae(etemp) > 0.01)
+    if (thetae(etemp) > 0.5)
     {
         double self_abs = 2. * C_PI * BOLTZ_CGS * etemp * pow(crit_freq(scale_height, edens, etemp, mag_field), 3.) / (3. * scale_height * pow(C_CGS, 2.));
         double init_term2 =6.76 * pow(10., -28.) * edens / (bessk2(1. / thetae(etemp)) * pow(a1, 1. / 6.));
@@ -456,33 +456,9 @@ double rsync(double scale_height, double edens, double etemp, double mag_field)
     }
 }
 
-
-/*scattering optical depth*/
-double soptical_depth(double scale_height, double edens, double etemp)
-{//All the function was checked step by step, seems to be working good.
-    double result = 2. * edens * THOMSON_CGS * scale_height;
-    return result;
-}
-
-/*Comptonization factor defined by Narayan & Yi (1995)*/
-double comptonization_factor_ny(double scale_height, double edens, double etemp, double mag_field)
-{//All the function was checked step by step, seems to be working good.
-    double prob = 1 - exp(-soptical_depth(scale_height, edens, etemp));
-    double A = 1 + 4 * thetae(etemp) + 16 * pow(thetae(etemp), 2.);
-    double eta1 = prob * (A - 1) / (1 - prob * A);
-    double eta2 = PLANCK_CGS * crit_freq(scale_height, edens, etemp, mag_field)/(3 * thetae(etemp) * ERM_CGS * pow(C_CGS,2.));
-    double eta3 = -1 - log(prob)/log(A);
-    double result = 1 + eta1* (1 - pow(eta2, eta3));
-    if (eta2 > 1){
-        printf("Narayan's Compton formula not valid, exiting...");
-        //exit(1);
-    }
-    return result;
-}
-
 /*Comptonization factor defined by Esin et al. (1996)*/
-double comptonization_factor (double scale_height, double edens, double etemp, double mag_field){
-	double thompson_opticaldepth = 2 * edens * THOMSON_CGS * etemp;
+double comptonization_factor_sync(double scale_height, double edens, double etemp, double mag_field){
+	double thompson_opticaldepth = 2 * edens * THOMSON_CGS * scale_height;
 	double Afactor = 1 + 4 * thetae(etemp) + 16 * pow(thetae(etemp), 2.);
 	double maxfactor = 3 * BOLTZ_CGS * etemp/(PLANCK_CGS * crit_freq(scale_height, edens, etemp, mag_field));
 	double jm = log(maxfactor)/log(Afactor);
@@ -519,10 +495,74 @@ double comptonization_factor (double scale_height, double edens, double etemp, d
     }
 }
 
+double comptonization_factor_brems(double scale_height, double edens, double etemp, double nu){
+	double thompson_opticaldepth = 2 * edens * THOMSON_CGS * scale_height;
+	double Afactor = 1 + 4 * thetae(etemp) + 16 * pow(thetae(etemp), 2.);
+	double maxfactor = 3 * BOLTZ_CGS * etemp/(PLANCK_CGS * nu);
+	double jm = log(maxfactor)/log(Afactor);
+	double s = thompson_opticaldepth + pow(thompson_opticaldepth, 2.);
+    double factor_1 = (1 - gammp(jm + 1, Afactor * s));
+    double factor_2 = maxfactor * gammp(jm +1, s);
+    if (factor_1 == 0){
+        double result = factor_2;
+        if (isnan(result)){
+            printf("O valor de thompson optical depth é%le\n", thompson_opticaldepth);
+            printf("O valor de Afactor é%le\n", Afactor);
+            printf("O valor de maxfactor é%le\n", maxfactor);
+            printf("O valor de jm é%le\n", jm);
+            printf("O valor de s é%le\n", s);
+            printf("O valor de gammp(As) é%le\n", gammp(jm + 1, Afactor * s));
+            printf("O valor de gammp(s) é%le\n", gammp(jm +1, s));
+            exit(1);
+        }
+        return result;
+    }
+    else{
+        double result = pow(M_E, s*(Afactor -1))*factor_1 + factor_2;
+        if (isnan(result)){
+            printf("O valor de thompson optical depth é%le\n", thompson_opticaldepth);
+            printf("O valor de Afactor é%le\n", Afactor);
+            printf("O valor de maxfactor é%le\n", maxfactor);
+            printf("O valor de jm é%le\n", jm);
+            printf("O valor de s é%le\n", s);
+            printf("O valor de gammp(As) é%le\n", gammp(jm + 1, Afactor * s));
+            printf("O valor de gammp(s) é%le\n", gammp(jm +1, s));
+            exit(1);
+        }
+        return result;
+    }
+}
+
+
+
+
+/*scattering optical depth*/
+double soptical_depth(double scale_height, double edens, double etemp)
+{//All the function was checked step by step, seems to be working good.
+    double result = 2. * edens * THOMSON_CGS * scale_height;
+    return result;
+}
+
+/*Comptonization factor defined by Narayan & Yi (1995)*/
+double comptonization_factor_ny(double scale_height, double edens, double etemp, double mag_field)
+{//All the function was checked step by step, seems to be working good.
+    double prob = 1 - exp(-soptical_depth(scale_height, edens, etemp));
+    double A = 1 + 4 * thetae(etemp) + 16 * pow(thetae(etemp), 2.);
+    double eta1 = prob * (A - 1) / (1 - prob * A);
+    double eta2 = PLANCK_CGS * crit_freq(scale_height, edens, etemp, mag_field)/(3 * thetae(etemp) * ERM_CGS * pow(C_CGS,2.));
+    double eta3 = -1 - log(prob)/log(A);
+    double result = 1 + eta1* (1 - pow(eta2, eta3));
+    if (eta2 > 1){
+        printf("Narayan's Compton formula not valid, exiting...");
+        //exit(1);
+    }
+    return result;
+}
+
 /*Cooling rate for optically thin gas*/
 double totalthincooling_rate(double scale_height, double edens, double etemp, double mag_field)
 {//All the function was checked step by step, seems to be working good.
-    double result = bremmscooling_rate(edens, etemp) + rsync(scale_height, edens, etemp, mag_field) * comptonization_factor(scale_height, edens, etemp, mag_field);
+    double result = bremmscooling_rate(edens, etemp) + rsync(scale_height, edens, etemp, mag_field) * comptonization_factor_sync(scale_height, edens, etemp, mag_field);
     return result;
 }
 
@@ -661,7 +701,7 @@ int main(int argc, char** argv)
             printf("o valor da freq crit =: %.11e\n", crit_freq(H, ne, te, B));
             printf("o valor do rsync =: %le\n", rsync(H, ne, te, B));
             printf("o valor do comptonization factor_ny =: %.11e\n", comptonization_factor_ny(H, ne, te, B));
-            printf("o valor do comptonization factor =: %.11e\n", comptonization_factor_ny(H, ne, te, B));
+            printf("o valor do comptonization factor =: %.11e\n", comptonization_factor_sync(H, ne, te, B));
             printf("o valor do cooling total no disco fino =:%le\n", totalthincooling_rate(H, ne, te, B));
             printf("O valor do tau_scat =:%le\n", soptical_depth(H, ne, te));
             printf("O valor do tau_abs =:%le\n", absoptical_depth(H, ne, te, B));
@@ -699,6 +739,7 @@ int main(int argc, char** argv)
             }
         }
     #elif (RECALCULATE_GRID_TEST)
+        char filename[] = "cooling_test_finalfantasy.txt";
         FILE *file_result;
         file_result = fopen("cooling_test_finalfantasy.txt", "w");
         FILE *file_result_coulomb;
@@ -728,7 +769,7 @@ int main(int argc, char** argv)
             printf("Error Reading Files from test\n");
             exit(0);
         }
-        double H_test[72192], B_test[72192], ne_test[72192], Te_test[72192], cool_test;
+        double H_test[N_RESOLUTION], B_test[N_RESOLUTION], ne_test[N_RESOLUTION], Te_test[N_RESOLUTION], cool_test;
 
         #if(COULOMB_RECALCULATE_GRID)
         double Ti_test[72192], coulomb_analy;
@@ -749,7 +790,7 @@ int main(int argc, char** argv)
         for (int i = 0; fscanf(file_temperature_test, "%lf", &Te_test[i]) == 1; i++) {
             // Do nothing inside the loop body, everything is done in the for loop header
         }
-        printf("Calculating the table in parallelized way. This can take a while...\n");
+        fprintf(stderr, "Calculating the table in parallelized way. This can take a while...\n");
         omp_set_num_threads(omp_get_num_threads());
         for (int i = 0; i < N_RESOLUTION; i++) {
             cool_test = log10(total_cooling(pow(10,H_test[i]), pow(10,ne_test[i]), pow(10,Te_test[i]), pow(10,B_test[i])));
@@ -762,7 +803,9 @@ int main(int argc, char** argv)
         
             //printf("H = %le, B = %le, ne = %le, Te = %le, value = %.8e\n", H_test[i], B_test[i], ne_test[i], Te_test[i], cool_test);
             fprintf(file_result, "%.8e\n", cool_test);
-        } 
+        }
+        fprintf(stderr, "Table generated: %s\n", filename);
+
         fclose(file_height_test);
         fclose(file_e_density_test);
         fclose(file_temperature_test);
@@ -849,13 +892,13 @@ int main(int argc, char** argv)
 
             #else
             FILE *file_height;
-            file_height = fopen("scale_height.txt", "r");
+            file_height = fopen("scale_height_33.txt", "r");
             FILE *file_e_density;
-            file_e_density = fopen("ne.txt", "r");
+            file_e_density = fopen("ne_33.txt", "r");
             FILE *file_temperature;
-            file_temperature = fopen("te.txt", "r");
+            file_temperature = fopen("te_33.txt", "r");
             FILE *file_mag_field;
-            file_mag_field = fopen("mag.txt", "r");
+            file_mag_field = fopen("mag_33.txt", "r");
 
 
             if (file_height == NULL || file_e_density == NULL || file_temperature == NULL || file_mag_field == NULL) {
@@ -949,9 +992,9 @@ int main(int argc, char** argv)
                         #elif(SYNCHROTRONTEST)
                         cooling_values_local[INDEX]= log10(rsync(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
                         #elif(C_SYNCHROTRONTEST)
-                        cooling_values_local[INDEX] = log10(rsync(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])) * comptonization_factor(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
+                        cooling_values_local[INDEX] = log10(rsync(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])) * comptonization_factor_sync(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
                         #elif(COMPTONTEST)
-                        cooling_values_local[INDEX] = log10(comptonization_factor(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
+                        cooling_values_local[INDEX] = log10(comptonization_factor_sync(pow(10,H_values[i]), pow(10,ne_values[k]), pow(10,Te_values[l]), pow(10,B_values[j])));
                         #elif(BREMSTRAHLUNGTEST)
                         cooling_values_local[INDEX]= log10(bremmscooling_rate(pow(10,ne_values[k]), pow(10,Te_values[l])));
                         #elif(ABSORPTIONTEST)
@@ -998,7 +1041,7 @@ int main(int argc, char** argv)
             #elif(COULOMBTEST)
             file_result = fopen("coulomb_table.bin", "w");
             #else
-            file_result = fopen("cooling_table.bin", "w");
+            file_result = fopen("cooling_table_33_001.txt", "w");
             #endif
             #if(COULOMBTEST)
                 #if(PRINT_BINARY)

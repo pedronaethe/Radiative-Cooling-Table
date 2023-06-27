@@ -19,8 +19,8 @@ int main()
 
 
     // Reading the cooling table
-    infile = fopen("cooling_table_100_001.txt", "r");
-    file_result = fopen("cooling_table_100_001.bin", "w");
+    infile = fopen("cooling_table_33_05.txt", "r");
+    file_result = fopen("cooling_table_33_05.bin", "w");
 
     
     if (infile == NULL)
