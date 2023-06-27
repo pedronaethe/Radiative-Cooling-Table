@@ -25,31 +25,32 @@ You'll see four ```.txt``` files inside the folder: scale_height.txt, mag.txt, n
 
 ### 2. Compile cooling_table_Open_MPI.c and run 
 
-This will generate a .txt file containing a table $(H_{\rm parameter} \times B_{\rm parameter} \times Ne_{\rm parameter} \times Te_{\rm parameter})$ with parameters $H$, $B$, $n_e$ and $T_e$ and cooling values in binary or txt file. If it's your first time working with this code, I suggest you print the text files. If you want, you can generate a table for each cooling component, you just have to activate the respective switch. Let's say you want to generate an individual table for the blackbody cooling, you have to adjust the switch as ```#define BLACKBODYTEST(1)```. If you want the total cooling table, just make sure that all the ```TEST``` switches are deactivated.
+This will generate a .txt file containing a table $(H_{\rm parameter} \times B_{\rm parameter} \times Ne_{\rm parameter} \times Te_{\rm parameter})$ with parameters $H$, $B$, $n_e$ and $T_e$ and cooling values in binary or txt file. If it's your first time working with this code, I suggest you print the text files just so you can individually see the table. If you want, you can generate a table for each cooling component, you just have to activate the respective switch. Let's say you want to generate an individual table for the blackbody cooling, you have to adjust the switch as ```#define BLACKBODYTEST(1)```. If you want the total cooling table, just make sure that all the ```TEST``` switches are deactivated.
 
-cooling_table_OpenMPI.c: it uses MPI combined with OpenMP so you can divide the task of calculating the tables into multiple processes and threaded. This is useful if you are trying to compute very high resolution tables, for example $100^4$ elements. 
+cooling_table_OpenMPI.c: it uses MPI combined with OpenMP so you can divide the task of calculating the tables into multiple processes and threaded. This is useful if you are trying to compute very high resolution tables, for example, $100^4$ elements. 
 
 To compile cooling_table_OpenMPI.c, type in the terminal
 
 ```$mpicc -o cooling_mpi cooling_table_OpenMPI.c -lm -fopenmp```
 
-To run in computer with a single processor, you can divide into multiple processes by typing:
+To run in a computer with a single processor, you can divide into multiple processes by typing:
 
 ```$mpirun -np <number_of_processes> ./cooling_mpi```
 
-It is useful to run this at clusters so you can take advantage of multiple processors. In this case, each job submission file will depend on the system. I suggest you look up the manual for the specific system and how to use MPI+OpenMP in it.
+It is useful to run this at clusters so you can take advantage of multiple processors. In this case, each job submission file will depend on the system. I suggest you look up the manual for the specific system and how to use MPI+OpenMP in it. Also, it is recommended to not use multiple processes when doing other tests that do not generate tables, e.g. ```RECALCULATE_GRID_TEST, SINGLE_VALUE``` and ```COMPARISON_MARCEL```.
 
 This file contains different tests done by me. Refer to the commentaries in the code to understand how each test is done and how to activate/deactivate them.
 
 ### 4. Compile cooling_texture.cu and run 
 
-Do this in order to test if the texture memory fetching is correct. This will help to introduce a faster cooling in GPU based GRMHD simulations. **This will work in Nvidia GPUs only**. 
+After generating the table, the next step is to bind the values to a texture object. This guide will walk you through the process of creating a 3D texture object and also provide the flexibility to perform single-value tests. These tests enable you to verify the correctness of the extracted values from the table without the need to debug on the GRMHD code.
+Do this in order to test if the texture memory fetching is correct. This will help to introduce faster cooling in GPU-based GRMHD simulations. **This will work in Nvidia GPUs only**. 
 
 To compile:
 
 ```$nvcc -arch=sm_60 -o cooling_texture cooling_texture.cu -lm```
 
-Change the number of your GPU compute capability, replace "60" with your own ```-arch=sm_XX```. You can find its number [here](https://developer.nvidia.com/cuda-gpus)
+Change the number of your GPU compute capability, and replace "60" with your own ```-arch=sm_XX```. You can find its number [here](https://developer.nvidia.com/cuda-gpus)
 
 To run:
 
@@ -57,13 +58,13 @@ To run:
 
 ### 5. Compile coulomb_texture.cu and run 
 
-Do this in order to test if the texture memory fetching is correct. This will help to introduce a faster cooling in GPU based GRMHD simulations. **This will work in Nvidia GPUs only**. 
+Do this in order to test if the texture memory fetching is correct. This will help to introduce faster cooling in GPU-based GRMHD simulations. **This will work in Nvidia GPUs only**. 
 
 To compile:
 
 ```$nvcc -arch=sm_60 -o coulomb_texture coulomb_texture.cu -lm```
 
-Change the number of your GPU compute capability, replace "60" with your own ```-arch=sm_XX```. You can find its number [here](https://developer.nvidia.com/cuda-gpus)
+Change the number of your GPU compute capability, and replace "60" with your own ```-arch=sm_XX```. You can find its number [here](https://developer.nvidia.com/cuda-gpus)
 
 To run:
 
