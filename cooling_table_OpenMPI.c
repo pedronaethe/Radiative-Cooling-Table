@@ -29,16 +29,17 @@
 #define BREMSTRAHLUNGTEST (0) //Generates a table for bremmstrahlung equation
 #define ABSORPTIONTEST (0) //Generates a table with absorption values
 #define COULOMBTEST (0) //Generates a table with coulomb values
-#define PRINT_BINARY (0) // Whether to print in binary or txt file
+#define PRINT_BINARY (1) // Whether to print in binary or txt file
 
 
 /*Switches to change between table generation and test, for table generation put everything 0*/
-#define RECALCULATE_GRID_TEST (0)/*Put simulation values for the 4 parameters and it will calculate*/
+#define RECALCULATE_GRID_TEST (1)/*Put simulation values for the 4 parameters and it will calculate*/
     #define COULOMB_RECALCULATE_GRID (0) // Do the same as RECALCULATE_GRID_TEST, but with coulomb, activate both.
     #define N_RESOLUTION 12600 //Total number of cells from simulation.
-#define SINGLE_VALUE (1) //Individual value of every function for a defined quantity of parameters
+#define SINGLE_VALUE (0) //Individual value of every function for a defined quantity of parameters
     #define COULOMB_TEST (0) //Do the same as SINGLE_VALUE, but with coulomb, activate both.
 #define COMPARISON_MARCEL (0) //Compare plot A.1 of Marcel et al. 2018: A unified accretion-ejection paradigm for black hole X-ray binaries
+#define FRAGILEMEIER_TEST (0)
 
 
 /*Size of the table, depend of parameters*/
@@ -56,7 +57,7 @@
 #define EPS (3e-7)
 #define maxSteps (1e3)
 #define FPMIN (1.0e-30) 
-#define INTEGRATION_STEPS (100000)
+#define INTEGRATION_STEPS (1e6)
 
 double gammln(double xxgam);
 /*Standard Numerical Recipes error function*/
@@ -327,27 +328,42 @@ double secant_bounded(double (*func)(double, double, double, double, double), do
 {//All the function was checked step by step, seems to be working good.
     void nrerror(char error_text[]);
     int j;
-    double xacc = 1e-6;
+    double xacc = 1e-5;
     double x1 = 10;
     double x2 = 20;
     double fl,f,dx,swap,xl,rts;
+    double x1_bef, x2_bef;
     int interval = 1;
     fl=(*func)(scale_height, x1, edens, etemp, mag_field);
     f=(*func)(scale_height, x2, edens, etemp, mag_field);
     while(interval){
         if (f * fl > 0){
+            x1_bef = x1;
             x1 = x1/2;
+            x2_bef = x2;
             x2 = x2*2;
             //printf("x1 = %le, x2 = %le \n", x1, x2);
         }
         else{
             interval = 0;
-            //printf("Finally x1 = %le, x2 = %le \n", x1, x2);
+            // printf("Finally x1 = %le, x2 = %le \n", x1, x2);
+            // printf("Finally x1_bef = %le, x2_bef = %le \n", x1_bef, x2_bef);
         }
         fl=(*func)(scale_height, x1, edens, etemp, mag_field);
         f=(*func)(scale_height, x2, edens, etemp, mag_field);
         //printf("fl = %le, f = %le\n", fl, f);
     }
+    
+    fl=(*func)(scale_height, x1_bef, edens, etemp, mag_field);
+    f=(*func)(scale_height, x1, edens, etemp, mag_field);
+    if (f * fl > 0){
+        x1 = x2_bef;
+    }else{
+        x2 = x1;
+        x1 = x1_bef;
+    }
+
+    //printf("Finally x1 = %le, x2 = %le \n", x1, x2);
     if (fabs(fl) < fabs(f)) { //Pick the bound with the smaller function value as
         rts=x1; //the most recent guess.
         xl=x2;
@@ -369,8 +385,8 @@ double secant_bounded(double (*func)(double, double, double, double, double), do
             return rts; //Convergence.
         }
     }
-    printf("Error! H = %le, B = %le, ne = %le, Te = %le\n", scale_height, mag_field, edens, etemp);
-    nrerror("Maximum number of iterations exceeded in rtsec");
+    //printf("Error! H = %le, B = %le, ne = %le, Te = %le\n", scale_height, mag_field, edens, etemp);
+    //nrerror("Maximum number of iterations exceeded in rtsec");
     return 0.0; //Never get here.
 }
 
@@ -431,13 +447,14 @@ double rsync(double scale_height, double edens, double etemp, double mag_field)
     double a2 = 0.4 / pow(a1, 1. / 4.);
     double a3 = 0.5316 / pow(a1, 1. / 2.);
     double a4 = 1.8899 * pow(a1, 1. / 3.);
+    double critical_frequency = crit_freq(scale_height, edens, etemp, mag_field);
     if (thetae(etemp) > 0.5)
     {
-        double self_abs = 2. * C_PI * BOLTZ_CGS * etemp * pow(crit_freq(scale_height, edens, etemp, mag_field), 3.) / (3. * scale_height * pow(C_CGS, 2.));
+        double self_abs = 2. * C_PI * BOLTZ_CGS * etemp * pow(critical_frequency, 3.) / (3. * scale_height * pow(C_CGS, 2.));
         double init_term2 =6.76 * pow(10., -28.) * edens / (bessk2(1. / thetae(etemp)) * pow(a1, 1. / 6.));
-        double syn_1 = 1. / pow(a4, 11. / 2.) *(exp(gammln(11./2.)))* gammq(11. / 2., a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.));
-        double syn_2 = a2 / pow(a4, 19. / 4.) *(exp(gammln(19./4.)))* gammq(19. / 4., a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.));
-        double syn_3 = a3 / pow(a4, 4.) * (pow(a4, 3.) * crit_freq(scale_height, edens, etemp, mag_field) + 3. * pow(a4, 2.) * pow(crit_freq(scale_height, edens, etemp, mag_field), 2. / 3.) + 6. * a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.) + 6.) * exp(-a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.));
+        double syn_1 = 1. / pow(a4, 11. / 2.) *(exp(gammln(11./2.)))* gammq(11. / 2., a4 * pow(critical_frequency, 1. / 3.));
+        double syn_2 = a2 / pow(a4, 19. / 4.) *(exp(gammln(19./4.)))* gammq(19. / 4., a4 * pow(critical_frequency, 1. / 3.));
+        double syn_3 = a3 / pow(a4, 4.) * (pow(a4, 3.) * critical_frequency + 3. * pow(a4, 2.) * pow(critical_frequency, 2. / 3.) + 6. * a4 * pow(critical_frequency, 1. / 3.) + 6.) * exp(-a4 * pow(critical_frequency, 1. / 3.));
         double synchrotron = init_term2 * (syn_1+syn_2+syn_3);
         double result = self_abs + synchrotron;
         
@@ -445,11 +462,11 @@ double rsync(double scale_height, double edens, double etemp, double mag_field)
     }
     else
     {
-        double self_abs = 2. * C_PI * BOLTZ_CGS * etemp * pow(crit_freq(scale_height, edens, etemp, mag_field), 3.) / (3. * scale_height * pow(C_CGS, 2.));
+        double self_abs = 2. * C_PI * BOLTZ_CGS * etemp * pow(critical_frequency, 3.) / (3. * scale_height * pow(C_CGS, 2.));
         double init_term2 = 6.76 * pow(10., -28.) * edens / (2. * pow(thetae(etemp), 2.) * pow(a1, 1. / 6.));
-        double syn_1 = 1. / pow(a4, 11. / 2.) *(exp(gammln(11./2.)))* gammq(11. / 2., a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.));
-        double syn_2 = a2 / pow(a4, 19. / 4.) *(exp(gammln(19./4.)))* gammq(19. / 4., a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.));
-        double syn_3 = a3 / pow(a4, 4.) * (pow(a4, 3.) * crit_freq(scale_height, edens, etemp, mag_field) + 3. * pow(a4, 2.) * pow(crit_freq(scale_height, edens, etemp, mag_field), 2. / 3.) + 6. * a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.) + 6.) * exp(-a4 * pow(crit_freq(scale_height, edens, etemp, mag_field), 1. / 3.));
+        double syn_1 = 1. / pow(a4, 11. / 2.) *(exp(gammln(11./2.)))* gammq(11. / 2., a4 * pow(critical_frequency, 1. / 3.));
+        double syn_2 = a2 / pow(a4, 19. / 4.) *(exp(gammln(19./4.)))* gammq(19. / 4., a4 * pow(critical_frequency, 1. / 3.));
+        double syn_3 = a3 / pow(a4, 4.) * (pow(a4, 3.) * critical_frequency + 3. * pow(a4, 2.) * pow(critical_frequency, 2. / 3.) + 6. * a4 * pow(critical_frequency, 1. / 3.) + 6.) * exp(-a4 * pow(critical_frequency, 1. / 3.));
         double synchrotron = init_term2 * (syn_1+syn_2+syn_3);
         double result = self_abs + synchrotron;
         return result;
@@ -465,6 +482,7 @@ double comptonization_factor_sync(double scale_height, double edens, double etem
 	double s = thompson_opticaldepth + pow(thompson_opticaldepth, 2.);
     double factor_1 = (1 - gammp(jm + 1, Afactor * s));
     double factor_2 = maxfactor * gammp(jm +1, s);
+
     if (factor_1 == 0){
         double result = factor_2;
         if (isnan(result)){
@@ -533,7 +551,30 @@ double comptonization_factor_brems(double scale_height, double edens, double ete
     }
 }
 
+double comptonized_brems(double scale_height, double edens, double etemp, double mag_field){
+    //Considering equation found in https://www.astro.utu.fi/~cflynn/Stars/l6.html and https://www.astro.rug.nl/~etolstoy/radproc/resources/lectures/lecture9pr.pdf
+    //Considering gaunt factor = 1, ni = ne and z = 1 for hydrogen gas.
+    double prefactor = 3.692345e8 * PLANCK_CGS/(BOLTZ_CGS);
+    double electron_sca_op = 0.4; // In units of cm^2/g
+    double rho = ERM_CGS * edens; //Mass density
+    double gaunt_factor = 1.0;
+    double frequency = pow(prefactor *gaunt_factor* pow(edens, 2.)/(pow(etemp, 3./2.) * electron_sca_op * rho), 1./2.);
+    double ray_regime = PLANCK_CGS * frequency/(BOLTZ_CGS * etemp);
+    double max_integration = BOLTZ_CGS * etemp/PLANCK_CGS;
+    double steps = (max_integration - 1e-6)/INTEGRATION_STEPS;
+    double result = 0;
+    if (ray_regime > 0.1){
+        return 1e-50;
+    }
 
+    for(double nu = frequency; nu <= max_integration; nu += steps){
+        result +=comptonization_factor_brems(scale_height, edens, etemp, nu) * bremmscooling_rate(edens, etemp)/(max_integration - frequency) * steps;
+    }
+    // if (result == 0){
+    //     result = bremmscooling_rate(edens, etemp);
+    // }
+    return result;
+}
 
 
 /*scattering optical depth*/
@@ -562,6 +603,7 @@ double comptonization_factor_ny(double scale_height, double edens, double etemp,
 /*Cooling rate for optically thin gas*/
 double totalthincooling_rate(double scale_height, double edens, double etemp, double mag_field)
 {//All the function was checked step by step, seems to be working good.
+    //double result = (comptonized_brems(scale_height, edens, etemp, mag_field) > 0? comptonized_brems(scale_height, edens, etemp, mag_field): bremmscooling_rate(edens, etemp)) + rsync(scale_height, edens, etemp, mag_field) * comptonization_factor_sync(scale_height, edens, etemp, mag_field);
     double result = bremmscooling_rate(edens, etemp) + rsync(scale_height, edens, etemp, mag_field) * comptonization_factor_sync(scale_height, edens, etemp, mag_field);
     return result;
 }
@@ -698,9 +740,10 @@ int main(int argc, char** argv)
             printf("O valor do bremmstrahlung ee =:%le\n", bremmstrahlung_ee(ne, te));
             printf("O valor do bremmstrahlung ei =:%le\n", bremmstrahlung_ei(ne, te));
             printf("O valor do bremmstrahlung total =:%le\n", bremmscooling_rate(ne, te));
+            //printf("o valor do comptonizaed brems =: %le\n", comptonized_brems(H, ne, te, B));
             printf("o valor da freq crit =: %.11e\n", crit_freq(H, ne, te, B));
             printf("o valor do rsync =: %le\n", rsync(H, ne, te, B));
-            printf("o valor do comptonization factor_ny =: %.11e\n", comptonization_factor_ny(H, ne, te, B));
+            //printf("o valor do comptonization factor_ny =: %.11e\n", comptonization_factor_ny(H, ne, te, B));
             printf("o valor do comptonization factor =: %.11e\n", comptonization_factor_sync(H, ne, te, B));
             printf("o valor do cooling total no disco fino =:%le\n", totalthincooling_rate(H, ne, te, B));
             printf("O valor do tau_scat =:%le\n", soptical_depth(H, ne, te));
@@ -738,6 +781,50 @@ int main(int argc, char** argv)
 
             }
         }
+    #elif(FRAGILEMEIER_TEST)
+        double B = 8.380e3, H = 2.7e7, ne = 1e-10/ERM_CGS;
+        double *brems, *synch, *csynch, *bbody_v, *cbrems, *cool;
+        double * Te;
+        Te = malloc(1000 * sizeof(double));
+        brems = malloc(1000 * sizeof(double));
+        synch = malloc(1000 * sizeof(double));
+        csynch = malloc(1000 * sizeof(double));
+        cbrems = malloc(1000 * sizeof(double));
+        cool = malloc(1000 * sizeof(double));
+        logspace(1e2, 1e15, 1000, Te);
+        char filename[] = "cool_comparison.bin";
+        FILE *file_result;
+        file_result = fopen(filename, "w");
+        #pragma omp parallel for
+        for (int i = 0; i < 1000; i++){
+            brems[i] = bremmscooling_rate(ne, Te[i]);
+            cbrems[i] = comptonized_brems(H, ne, Te[i], B);
+            synch[i] = rsync(H, ne, Te[i], B);
+            csynch[i] = rsync(H, ne, Te[i], B) * comptonization_factor_sync(H, ne, Te[i], B);
+            //bbody_v = bbody(H, ne, Te[i], B);
+            cool[i] = totalthincooling_rate(H, ne, Te[i], B);
+            printf("cooling [%d] = %le ,T[%d] = %le \n",i, cool[i], i, Te[i]);
+        }
+        #pragma omp barrier
+        printf("Starting to write...\n");
+
+        for (int i = 0; i < 1000; i++){
+            fwrite(&brems[i], sizeof(double), 1, file_result);
+            fwrite(&cbrems[i], sizeof(double), 1, file_result);
+            fwrite(&synch[i], sizeof(double), 1, file_result);
+            fwrite(&csynch[i], sizeof(double), 1, file_result);
+            //fwrite(&bbody_v, sizeof(double), 1, file_result);
+            fwrite(&cool[i], sizeof(double), 1, file_result);
+        }
+        printf("Created file: %s \n", filename);
+        free(Te);
+        free(brems);
+        free(synch);
+        free(csynch);
+        free(cbrems);
+        free(cool);
+        fclose(file_result);
+
     #elif (RECALCULATE_GRID_TEST)
         char filename[] = "cooling_test_finalfantasy.txt";
         FILE *file_result;
@@ -1027,19 +1114,19 @@ int main(int argc, char** argv)
         if(rank ==0){
             FILE *file_result;
             #if(BLACKBODYTEST)
-            file_result = fopen("bbody_table.bin", "w");
+            file_result = fopen("bbody_table_05.bin", "w");
             #elif(SYNCHROTRONTEST)
-            file_result = fopen("synch_table.bin", "w");
+            file_result = fopen("synch_table_05.bin", "w");
             #elif(C_SYNCHROTRONTEST)
-            file_result = fopen("C_synch_table.bin", "w");
+            file_result = fopen("C_synch_table_05.bin", "w");
             #elif(COMPTONTEST)
-            file_result = fopen("compton_table.bin", "w");
+            file_result = fopen("compton_table_05.bin", "w");
             #elif(BREMSTRAHLUNGTEST)
-            file_result = fopen("brems_table.bin", "w");
+            file_result = fopen("brems_table_05.bin", "w");
             #elif(ABSORPTIONTEST)
-            file_result = fopen("tau_table.bin", "w");
+            file_result = fopen("tau_table_05.bin", "w");
             #elif(COULOMBTEST)
-            file_result = fopen("coulomb_table.bin", "w");
+            file_result = fopen("coulomb_table_05.bin", "w");
             #else
             file_result = fopen("cooling_table_33_001.txt", "w");
             #endif

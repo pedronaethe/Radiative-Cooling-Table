@@ -4,10 +4,10 @@
 #include <time.h>
 
 
-#define SIZEOF_H 33 /*Size of H's in your cooling table*/
-#define SIZEOF_B 33 /*Size of B's in your cooling table*/
-#define SIZEOF_TE 33 /*Size of Te's in your cooling table*/
-#define SIZEOF_NE 33/*Size of Ne's in your cooling table*/
+#define SIZEOF_H 101 /*Size of H's in your cooling table*/
+#define SIZEOF_B 101 /*Size of B's in your cooling table*/
+#define SIZEOF_TE 101 /*Size of Te's in your cooling table*/
+#define SIZEOF_NE 101/*Size of Ne's in your cooling table*/
 #define N_RESOLUTION 12600 /*This is for resolution_test and is the number of cells in your simulation*/
 #define DT 7.336005915070878e-07 /*This is an approximation of the timestep for coulomb test*/
 
@@ -16,8 +16,8 @@
 #define TABLE_SIZE (SIZEOF_H * SIZEOF_B * SIZEOF_TE * SIZEOF_NE) /*Total size of the table*/
 #define SIZEOF_TEST 130 /*Quad root of number of calculations for GLOBAL_MEMORY_TEST*/
 
-#define SINGLE_TEST (1) /*Single value test*/
-#define RESOLUTION_TEST (0) /*Compare analytical values with values from the table*/
+#define SINGLE_TEST (0) /*Single value test*/
+#define RESOLUTION_TEST (1) /*Compare analytical values with values from the table*/
 #define COMPARISON_MARCEL (0) /*Compare plot A.1 of Marcel et al. 2018: A unified accretion-ejection paradigm for black hole X-ray binaries*/
 #define GLOBAL_MEMORY_TEST (0) /*Test texture memory vs global memory efficiency*/
 #define INDEX(i, j, k, l) (l + SIZEOF_TE * (k + SIZEOF_NE * (j + SIZEOF_B * i))) /*4D indexing*/
@@ -44,7 +44,7 @@ void Load_Cooling_Tables(float *cooling_table)
     double value;
 
     // Reading the cooling table
-    infile = fopen("cooling_table_33_05.bin", "rb");
+    infile = fopen("cooling_table_05.bin", "rb");
 
     if (infile == NULL)
     {
@@ -292,7 +292,7 @@ __global__ void cooling_function_new(cudaTextureObject_t my_tex, float a0, float
                 lambda = (1 - alpha_lower) * (1 - beta) * tex3D<float>(my_tex, v4_ij, v1, v0) + alpha_lower * (1 - beta) * v4_ihalfj +
                          (1 - alpha_lower) * beta * tex3D<float>(my_tex, v4_ij1, v1, v0) + alpha_lower * beta * v4_ihalfj1;                
 
-            }else if(a3 >t_break && a3 < t_ubreak){//working NAO TA FUNCIONANDO!!!! 
+            }else if(a3 >t_break && a3 < t_ubreak){//working
                 printf("temperatura entre o break e o limite superior\n");
                 frac_break = t_ubreak - t_break;
                 alpha_upper = (a3 - t_break)/(frac_break);
@@ -409,16 +409,14 @@ __global__ void cooling_function_test_new(cudaTextureObject_t my_tex, double *a0
     double lambda;
     int i;
     float a2_index, a3_index;
-    // double t_break = 7.7730466;
-    // double t_ubreak = 7.85;
-    // double t_lbreak = 7.72;
-    // double t_break = 9.472016;
-    // double t_ubreak = 9.540000;
-    // double t_lbreak = 9.410000;
 
     double t_break = 9.472016;
-    double t_ubreak = 9.71875; //para 101
-    double t_lbreak = 9.3125; //para 101
+    double t_ubreak = 9.540000;
+    double t_lbreak = 9.410000;
+
+    // double t_break = 9.472016;
+    // double t_ubreak = 9.71875; //para 101
+    // double t_lbreak = 9.3125; //para 101
     
     float alpha, beta, v4_ij, v4_i1j, v4_ij1, v4_i1j1, v4_i, v4_i1;
     float v4_ihalfj, v4_ihalfj1, v4_im1j1, v4_im1j, v4_iM1j1, v4_iM1j, v4_im2j1, v4_im2j, v4_iM2j1, v4_iM2j, frac_break, alpha_lower, alpha_upper;
@@ -537,7 +535,6 @@ __global__ void cooling_function_test_new(cudaTextureObject_t my_tex, double *a0
                 lambda = (1 - alpha) * tex3D<float>(my_tex, v4_i, v1, v0) + alpha * tex3D<float>(my_tex, v4_i1, v1, v0);
             }
         }
-        printf("H = %le, B = %le, ne = %le, Te = %le, lambda = %le \n", a0[i], a1[i], a2[i], a3[i], lambda);
         value[i] = lambda;
     }
     

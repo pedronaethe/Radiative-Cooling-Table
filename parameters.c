@@ -1,3 +1,5 @@
+/*Code created by Pedro Naethe Motta to generate the .txt's file for each parameter.*/
+
 
 #include <stdio.h>
 #include <math.h>
@@ -19,20 +21,6 @@ int main()
 	FILE *Fmag;
 	Fmag = fopen("mag_33.txt", "w");
 
-	// If you want to generate the table for R, ne and Te out of the log space use the code below:
-	//
-	// for (R = 3e6; R < 1e12; R = pow(M_E, log(R) + logspacestep(3e6, 1e12, steps)))
-	// {
-	// 	fprintf(Fradius, "%le\n", R);
-	// }
-	// for (Te = 1e6; Te < 1e10; Te = pow(M_E, log(Te) + logspacestep(1e6, 1e10, steps)))
-	// {
-	// 	fprintf(Ftemperature, "%le\n", Te);
-	// }
-	// for (ne = 1e12; ne < 2e20; ne = pow(M_E, log(ne) + logspacestep(1e12, 2e20, steps)))
-	// {
-	// 	fprintf(Feletronicdensity, "%le\n", ne);
-	// }
     while (i <= 32)
     {
         v1 = 3 + 5 * i/32;
