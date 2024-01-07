@@ -20,7 +20,7 @@
 #define ME_CGS (9.1094e-28) /*Mass hydrogen molecule*/
 #define C_Mbh (10. * C_Msun) /*Mass of the black hole*/
 
-#define SIZEOF_TEST 15 /*Quad root of number of calculations for GLOBAL_MEMORY_TEST*/
+#define SIZEOF_TEST 30 /*Quad root of number of calculations for GLOBAL_MEMORY_TEST*/
 #define INDEX(i, j, k, l) (l + SIZEOF_TE * (k + SIZEOF_NE * (j + SIZEOF_B * i))) /*4D indexing*/
 #define TABLE_SIZE (SIZEOF_H * SIZEOF_B * SIZEOF_TE * SIZEOF_NE) /*Total size of the table*/
 
@@ -29,7 +29,7 @@
 #define SIZEOF_TE 33 /*Size of Te's in your cooling table*/
 #define SIZEOF_NE 33/*Size of Ne's in your cooling table*/
 
-
+#define SINGLE_VALUE (0)
 /*Routine parameters for bessel/gamma functions*/
 #define ITMAX (1e8)  
 #define EPS (3e-7)
@@ -317,7 +317,7 @@ __device__ double secant_bounded(double (*func)(double, double, double, double, 
 {//All the function was checked step by step, seems to be working good.
     __device__ void nrerror(char error_text[]);
     int j;
-    double xacc = 1e-3;
+    double xacc = 1e-5;
     double x1 = 10;
     double x2 = 20;
     double fl,f,dx,swap,xl,rts;
@@ -325,6 +325,7 @@ __device__ double secant_bounded(double (*func)(double, double, double, double, 
     int interval = 1;
     fl=(*func)(scale_height, x1, edens, etemp, mag_field);
     f=(*func)(scale_height, x2, edens, etemp, mag_field);
+    //printf("f = %le, fl = %le, H = %le, ne = %le, te = %le, B = %le\n", f, fl, scale_height, edens, etemp, mag_field);
     while(interval){
         if (f * fl > 0){
             x1_bef = x1;
@@ -342,17 +343,9 @@ __device__ double secant_bounded(double (*func)(double, double, double, double, 
         f=(*func)(scale_height, x2, edens, etemp, mag_field);
         //printf("fl = %le, f = %le\n", fl, f);
     }
-    
-    fl=(*func)(scale_height, x1_bef, edens, etemp, mag_field);
-    f=(*func)(scale_height, x1, edens, etemp, mag_field);
-    if (f * fl > 0){
-        x1 = x2_bef;
-    }else{
-        x2 = x1;
-        x1 = x1_bef;
-    }
 
     //printf("Finally x1 = %le, x2 = %le \n", x1, x2);
+    //printf("xl = %le, rts = %le, f = %le, fl = %le\n", xl, rts, f, fl);
     if (fabs(fl) < fabs(f)) { //Pick the bound with the smaller function value as
         rts=x1; //the most recent guess.
         xl=x2;
@@ -363,13 +356,13 @@ __device__ double secant_bounded(double (*func)(double, double, double, double, 
         xl=x1;
         rts=x2;
     }
+    //printf("xl = %le, rts = %le, f = %le, fl = %le\n", xl, rts, f, fl);
     for (j=1;j<=ITMAX;j++) { //Secant loop.
         dx=(xl-rts)*f/(f-fl); //Increment with respect to latest value.
         xl=rts;
         fl=f;
         rts += dx;
         f=(*func)(scale_height, rts, edens, etemp, mag_field);
-        //printf("rts = %le \n", rts);
         if (fabs(dx) < xacc || f == 0.0) {
             return rts; //Convergence.
         }
@@ -479,6 +472,13 @@ __device__ double comptonization_factor_sync(double scale_height, double edens, 
 	double s = thompson_opticaldepth + pow(thompson_opticaldepth, 2.);
     double factor_1 = (1 - gammp(jm + 1, Afactor * s));
     double factor_2 = maxfactor * gammp(jm +1, s);
+    // printf("O valor de thompson optical depth é%le\n", thompson_opticaldepth);
+    // printf("O valor de Afactor é%le\n", Afactor);
+    // printf("O valor de maxfactor é%le\n", maxfactor);
+    // printf("O valor de jm é%le\n", jm);
+    // printf("O valor de s é%le\n", s);
+    // printf("O valor de gammp(As) é%le\n", gammp(jm + 1, Afactor * s));
+    // printf("O valor de gammp(s) é%le\n", gammp(jm +1, s));
     if (factor_1 == 0){
         double result = factor_2;
         if (isnan(result)){
@@ -737,6 +737,7 @@ void logspace(double start, double end, int num, double *result)
 
 __global__ void cooling_function_comparison_global(cudaTextureObject_t my_tex, double *a0, double *a1, double *a2, double *a3, double *value)
 {
+    
     double v0, v1, v4;
     double lambda;
     float a2_index, a3_index;
@@ -914,6 +915,33 @@ __global__ void cooling_function_analytical(double * a0, double * a1, double * a
     } 
 }
 
+__global__ void cooling_function_single(double a0, double a1, double a2, double a3){
+    a0 = 3;
+    a1 = 2.1428;
+    a2 = 18.428571;
+    a3 = 11.285714;
+    a0 = pow(10, a0);
+    a1 = pow(10, a1);
+    a2 = pow(10, a2);
+    a3 = pow(10, a3);
+    printf("H = %le, B = %le, ne = %le, te = %le \n", a0, a1, a2, a3);
+    printf("One of the roots is: %lf\n",secant_bounded(trans_f, a0, a2, a3, a1));
+    printf("o valor do thetae =:%.11e\n", thetae(a3));
+    printf("O valor do bremmstrahlung ee =:%le\n", bremmstrahlung_ee(a2, a3));
+    printf("O valor do bremmstrahlung ei =:%le\n", bremmstrahlung_ei(a2, a3));
+    printf("O valor do bremmstrahlung total =:%le\n", bremmscooling_rate(a2, a3));
+    //printf("o valor do comptonizaed brems =: %le\n", comptonized_brems(a0, a2, a3, a1));
+    printf("o valor da freq crit =: %.11e\n", crit_freq(a0, a2, a3, a1));
+    printf("o valor do rsync =: %le\n", rsync(a0, a2, a3, a1));
+    printf("o valor do comptonization factor =: %.11e\n", comptonization_factor_sync(a0, a2, a3, a1));
+    printf("o valor do cooling total no disco fino =:%le\n", totalthincooling_rate(a0, a2, a3, a1));
+    printf("O valor do tau_scat =:%le\n", soptical_depth(a0, a2, a3));
+    printf("O valor do tau_abs =:%le\n", absoptical_depth(a0, a2, a3, a1));
+    printf("O valor do tau_total =:%le\n", total_optical_depth(a0, a2, a3, a1));
+    printf("o valor do cooling total =:%le\n", total_cooling(a0, a2, a3, a1));
+    printf("o valor do cooling total em log:%le\n", log10(total_cooling(a0, a2, a3, a1)));
+}
+
 int main(){
     double *H_random, *B_random, *ne_random, *Te_random;
     clock_t start_time, end_time;
@@ -953,7 +981,21 @@ int main(){
 
     fprintf(stderr,"Starting Analytical Calculation\n");
     start_time = clock();
-    cooling_function_analytical<<<1, 1>>>(d_H_random, d_B_random, d_Ne_random, d_Te_random, d_results);
+    #if(SINGLE_VALUE)
+        double H, ne, te, B;
+        // printf("valor do scale_height\n");
+        // scanf("%le", &H);
+        // printf ("valor do B\n");
+        // scanf("%le", &B);
+        // printf("Valor de edens\n");
+        // scanf("%le", &ne);
+        // printf ("valor de etemp\n");
+        // scanf("%le", &te);
+        cooling_function_single<<<1,1>>>(H, B, ne, te);
+        cudaDeviceSynchronize();
+
+    #endif
+    //cooling_function_analytical<<<1, 1>>>(d_H_random, d_B_random, d_Ne_random, d_Te_random, d_results);
     cudaDeviceSynchronize();
     end_time = clock();
     duration = (double)(end_time - start_time) / CLOCKS_PER_SEC;

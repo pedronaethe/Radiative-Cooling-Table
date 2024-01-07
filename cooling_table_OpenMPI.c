@@ -6,6 +6,8 @@
 #include <string.h>
 #include <omp.h>
 #include <mpi.h>
+#include <time.h>
+
 
 /* Defining Constants in CGS*/
 #define MH_CGS (1.673534e-24) /*hydrogen mass*/
@@ -33,10 +35,10 @@
 
 
 /*Switches to change between table generation and test, for table generation put everything 0*/
-#define RECALCULATE_GRID_TEST (1)/*Put simulation values for the 4 parameters and it will calculate*/
+#define RECALCULATE_GRID_TEST (0)/*Put simulation values for the 4 parameters and it will calculate*/
     #define COULOMB_RECALCULATE_GRID (0) // Do the same as RECALCULATE_GRID_TEST, but with coulomb, activate both.
     #define N_RESOLUTION 12600 //Total number of cells from simulation.
-#define SINGLE_VALUE (0) //Individual value of every function for a defined quantity of parameters
+#define SINGLE_VALUE (1) //Individual value of every function for a defined quantity of parameters
     #define COULOMB_TEST (0) //Do the same as SINGLE_VALUE, but with coulomb, activate both.
 #define COMPARISON_MARCEL (0) //Compare plot A.1 of Marcel et al. 2018: A unified accretion-ejection paradigm for black hole X-ray binaries
 #define FRAGILEMEIER_TEST (0)
@@ -336,6 +338,7 @@ double secant_bounded(double (*func)(double, double, double, double, double), do
     int interval = 1;
     fl=(*func)(scale_height, x1, edens, etemp, mag_field);
     f=(*func)(scale_height, x2, edens, etemp, mag_field);
+    //printf("f = %le, fl = %le, H = %le, ne = %le, te = %le, B = %le\n", f, fl, scale_height, edens, etemp, mag_field);
     while(interval){
         if (f * fl > 0){
             x1_bef = x1;
@@ -353,17 +356,9 @@ double secant_bounded(double (*func)(double, double, double, double, double), do
         f=(*func)(scale_height, x2, edens, etemp, mag_field);
         //printf("fl = %le, f = %le\n", fl, f);
     }
-    
-    fl=(*func)(scale_height, x1_bef, edens, etemp, mag_field);
-    f=(*func)(scale_height, x1, edens, etemp, mag_field);
-    if (f * fl > 0){
-        x1 = x2_bef;
-    }else{
-        x2 = x1;
-        x1 = x1_bef;
-    }
 
     //printf("Finally x1 = %le, x2 = %le \n", x1, x2);
+    //printf("xl = %le, rts = %le, f = %le, fl = %le\n", xl, rts, f, fl);
     if (fabs(fl) < fabs(f)) { //Pick the bound with the smaller function value as
         rts=x1; //the most recent guess.
         xl=x2;
@@ -374,19 +369,19 @@ double secant_bounded(double (*func)(double, double, double, double, double), do
         xl=x1;
         rts=x2;
     }
+    //printf("xl = %le, rts = %le, f = %le, fl = %le\n", xl, rts, f, fl);
     for (j=1;j<=ITMAX;j++) { //Secant loop.
         dx=(xl-rts)*f/(f-fl); //Increment with respect to latest value.
         xl=rts;
         fl=f;
         rts += dx;
         f=(*func)(scale_height, rts, edens, etemp, mag_field);
-        //printf("rts = %le \n", rts);
         if (fabs(dx) < xacc || f == 0.0) {
             return rts; //Convergence.
         }
     }
     //printf("Error! H = %le, B = %le, ne = %le, Te = %le\n", scale_height, mag_field, edens, etemp);
-    //nrerror("Maximum number of iterations exceeded in rtsec");
+    //printf("Maximum number of iterations exceeded in rtsec");
     return 0.0; //Never get here.
 }
 

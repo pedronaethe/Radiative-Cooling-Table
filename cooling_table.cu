@@ -4,22 +4,22 @@
 #include <time.h>
 
 
-#define SIZEOF_H 101 /*Size of H's in your cooling table*/
-#define SIZEOF_B 101 /*Size of B's in your cooling table*/
-#define SIZEOF_TE 101 /*Size of Te's in your cooling table*/
-#define SIZEOF_NE 101/*Size of Ne's in your cooling table*/
+#define SIZEOF_H 33 /*Size of H's in your cooling table*/
+#define SIZEOF_B 33 /*Size of B's in your cooling table*/
+#define SIZEOF_TE 33 /*Size of Te's in your cooling table*/
+#define SIZEOF_NE 33/*Size of Ne's in your cooling table*/
 #define N_RESOLUTION 12600 /*This is for resolution_test and is the number of cells in your simulation*/
 #define DT 7.336005915070878e-07 /*This is an approximation of the timestep for coulomb test*/
 
 #define THOMSON_CGS (6.652e-25) /*Thomson's cross section in CGS*/
 #define BOLTZ_CGS (1.3806504e-16) /*Boltzmann constant in CGS*/
 #define TABLE_SIZE (SIZEOF_H * SIZEOF_B * SIZEOF_TE * SIZEOF_NE) /*Total size of the table*/
-#define SIZEOF_TEST 130 /*Quad root of number of calculations for GLOBAL_MEMORY_TEST*/
+#define SIZEOF_TEST 100  /*Quad root of number of calculations for GLOBAL_MEMORY_TEST*/
 
 #define SINGLE_TEST (0) /*Single value test*/
-#define RESOLUTION_TEST (1) /*Compare analytical values with values from the table*/
+#define RESOLUTION_TEST (0) /*Compare analytical values with values from the table*/
 #define COMPARISON_MARCEL (0) /*Compare plot A.1 of Marcel et al. 2018: A unified accretion-ejection paradigm for black hole X-ray binaries*/
-#define GLOBAL_MEMORY_TEST (0) /*Test texture memory vs global memory efficiency*/
+#define GLOBAL_MEMORY_TEST (1) /*Test texture memory vs global memory efficiency*/
 #define INDEX(i, j, k, l) (l + SIZEOF_TE * (k + SIZEOF_NE * (j + SIZEOF_B * i))) /*4D indexing*/
 
 /*Declaration of both texture objects*/
@@ -44,7 +44,7 @@ void Load_Cooling_Tables(float *cooling_table)
     double value;
 
     // Reading the cooling table
-    infile = fopen("cooling_table_05.bin", "rb");
+    infile = fopen("cooling_table_33_05.bin", "rb");
 
     if (infile == NULL)
     {
@@ -105,7 +105,7 @@ void CreateTexture(void)
     cudaTextureDesc texDescr;
     memset(&texDescr, 0, sizeof(texDescr));
     texDescr.normalizedCoords = false; //Whether to use normalized coordinates or not, this will impact the indexing
-    texDescr.filterMode = cudaFilterModeLinear; // Whether to use nearest-neighbor approximation or trilinear interpolation
+    texDescr.filterMode = cudaFilterModePoint;//cudaFilterModeLinear;//cudaFilterModePoint; // Whether to use nearest-neighbor approximation or trilinear interpolation
     texDescr.addressMode[0] = cudaAddressModeClamp; // Out of boundary conditions in dimension 1
     texDescr.addressMode[1] = cudaAddressModeClamp; // Out of boundary conditions in dimension 2
     texDescr.addressMode[2] = cudaAddressModeClamp; // Out of boundary conditions in dimension 3
@@ -126,525 +126,194 @@ __device__ void linspace(float start, float end, int numPoints, float *result)
     }
 }
 
-__global__ void cooling_function(cudaTextureObject_t my_tex, float a0, float a1, float a2, float a3)
-{
-    float v0, v1, v4;
-    double lambda;
+__device__ double no_interpolation(cudaTextureObject_t my_tex, double H_value, double B_value, double ne_value, double te_value){
+    double coord_H, coord_B, Coord;
+    float te_index, ne_index;
+
 
     const int nw = SIZEOF_H;  // Number of H used to generate table
     const int nx = SIZEOF_TE; // Number of te used to generate table
     const int ny = SIZEOF_NE; // Number of ne used to generate table
     const int nz = SIZEOF_B;  // Number of Bmag used to generate table
 
-    // We need this to do our manual interpolation. listofa1 will hold values of magfield from the table and listofa2 will hold values of ne.
-    float listofa1[SIZEOF_B]; 
-    float listofa2[SIZEOF_NE];
-    float a1_index, a2_index;
-
-    // Generate the values used in the table by both parameters B and ne
-    linspace(0, 10, SIZEOF_B, listofa1);
-    linspace(2, 25, SIZEOF_NE, listofa2);
-
     // Calculate both dimensions that are not flattened
-    v0 = (floor(((a0 - 3.) > 0 ? a0 - 3. : 0) * (nw - 1.) / 5.) + 0.5);
-    v4 = (floor(((a3 - 2.) > 0 ? a3 - 2. : 0) * (nx - 1.) / 13.) + 0.5);
+    coord_H = ((((H_value - 3.) > 0 ? H_value - 3. : 0) * (nw - 1.) / 5.) + 0.5);
+    coord_B = (((B_value - 0.) > 0 ? B_value : 0) * (nz - 1.) / 10. + 0.5);
 
-    // printf("lambda = %lf",lambda);
-    //In order not to mess up with our interpolation, if the values for the magnetic field and density extrapolates, we'll set them to their max value.
-    if (a1 > 10)
+    // Select maximum values separetly
+    if (ne_value > 25)
     {
-        a1 = 10;
+        ne_value = 25;
     }
-    else if (a2 > 25)
+    else if (te_value > 15)
     {
-        a2 = 25;
+        te_value = 15;
     }
 
     // These will give us the indexing of B and ne from the table, we gotta see if they are integers or not.
-    a1_index = (((a1 - 0.) > 0 ? a1 : 0) * (nz - 1.) / 10.);
-    a2_index = (((a2 - 2.) > 0 ? a2 - 2. : 0) * (ny - 1.) / 23.);
+    te_index = (((te_value - 2.) > 0 ? te_value - 2. : 0) * (nx - 1.) / 13.);
+    ne_index = (((ne_value - 2.) > 0 ? ne_value - 2. : 0) * (ny - 1.) / 23.); 
 
-
-    /*Now we manually interpolate between B and ne region. If B value is equal to a table value, we don't need to interpolate it and its index will be an integer.
-    However, if it's not, the index will not be a an integer and we need to take the fractional part and interpolate, we adress the four possible scenarios:
-    indexB and indexNe are both integers, indexB is an integer but indexNe is not, indexNe is an integer but indexB is not and none of them are integers.*/
-    if (a1_index == (int)a1_index && a2_index == (int)a2_index) //condition for both of them being integers
-    {
-        printf("Entrance 1 \n");
-        v1 = ((((a2 - 2.) > 0 ? a2 - 2. : 0) * (ny - 1.) / 23.) + ((a1 - 0.) * (nz - 1.) / 10.) * (ny) + 0.5);
-        printf("v0 = %lf, v1 = %lf, v4 = %lf\n", v0, v1, v4);
-        lambda = tex3D<float>(my_tex, v4, v1, v0);
-    }
-    else if (a1_index != (int)a1_index && a2_index != (int)a2_index)//condition for none of them being integers
-    {
-        printf("Entrance 2 \n");
-        float alpha, beta, v1_ij, v1_i1j, v1_ij1, v1_i1j1;
-        alpha = a1_index - floor(a1_index);
-        beta = a2_index - floor(a2_index);
-
-        v1_ij = (floor(((a2 - 2.) > 0 ? a2 - 2. : 0) * (ny - 1.) / 23.) + floor((a1 - 0.) * (nz - 1.) / 10.) * (ny) + 0.5);
-        v1_i1j = ((floor(((a2 - 2.) > 0 ? a2 - 2. : 0) * (ny - 1.) / 23.) + 1) + floor((a1 - 0.) * (nz - 1.) / 10.) * (ny) + 0.5);
-        v1_ij1 = ((floor(((a2 - 2.) > 0 ? a2 - 2. : 0) * (ny - 1.) / 23.)) + (floor((a1 - 0.) * (nz - 1.) / 10.) + 1) * (ny) + 0.5);
-        v1_i1j1 = ((floor(((a2 - 2.) > 0 ? a2 - 2. : 0) * (ny - 1.) / 23.) + 1) + (floor((a1 - 0.) * (nz - 1.) / 10.) + 1) * (ny) + 0.5);
-        printf("B_before = %lf, B_after = %lf, ne_before = %lf, ne_after = %lf\n", floor(a1_index), floor(a1_index) + 1, floor(a2_index), floor(a2_index) + 1);
-        printf("alpha = %lf, beta = %lf, texij = %lf, texi1j = %lf, texij1 = %lf, texi1j1 = %lf \n", alpha, beta, tex3D<float>(my_tex, v4, v1_ij, v0),
-               tex3D<float>(my_tex, v4, v1_i1j, v0), tex3D<float>(my_tex, v4, v1_ij1, v0), tex3D<float>(my_tex, v4, v1_i1j1, v0));
-
-        lambda = (1 - alpha) * (1 - beta) * tex3D<float>(my_tex, v4, v1_ij, v0) + alpha * (1 - beta) * tex3D<float>(my_tex, v4, v1_i1j, v0) +
-                 (1 - alpha) * beta * tex3D<float>(my_tex, v4, v1_ij1, v0) + alpha * beta * tex3D<float>(my_tex, v4, v1_i1j1, v0);
-    }
-    else if (a1_index != (int)a1_index) //Condition for indexB not integer and indexNe being an integer
-    {
-        printf("Entrance 3 \n");
-        float alpha, v1_i, v1_i1;
-        printf("a1_index = %lf\n", a1_index);
-        alpha = a1_index - floor(a1_index);
-        v1_i = ((((a2 - 2.) > 0 ? a2 - 2. : 0) * (ny - 1.) / 23.) + floor((a1 - 0.) * (nz - 1.) / 10.) * (ny) + 0.5);
-        v1_i1 = ((((a2 - 2.) > 0 ? a2 - 2. : 0) * (ny - 1.) / 23.) + (floor((a1 - 0.) * (nz - 1.) / 10.) + 1) * (ny) + 0.5);
-        printf("v1_i = %lf, v1_i1 = %lf \n", v1_i, v1_i1);
-        printf("alpha = %lf, tex before = %lf, tex after = %lf \n", alpha, tex3D<float>(my_tex, v4, v1_i, v0), tex3D<float>(my_tex, v4, v1_i1, v0));
-        lambda = (1 - alpha) * tex3D<float>(my_tex, v4, v1_i, v0) + alpha * tex3D<float>(my_tex, v4, v1_i1, v0);
-    }
-    else //Condition for indexNe not integer and indexB being an integer
-    {
-        printf("Entrance 4 \n");
-        float alpha, v1_i, v1_i1;
-        alpha = a2_index - floor(a2_index);
-        v1_i = (floor(((a2 - 2.) > 0 ? a2 - 2. : 0) * (ny - 1.) / 23.) + ((a1 - 0.) * (nz - 1.) / 10.) * (ny) + 0.5);
-        v1_i1 = ((floor(((a2 - 2.) > 0 ? a2 - 2. : 0) * (ny - 1.) / 23.) + 1) + ((a1 - 0.) * (nz - 1.) / 10.) * (ny) + 0.5);
-        printf("v1_i = %lf, v1_i1 = %lf \n", v1_i, v1_i1);
-        printf("alpha = %lf, tex before = %lf, tex after = %lf \n", alpha, tex3D<float>(my_tex, v4, v1_i, v0), tex3D<float>(my_tex, v4, v1_i1, v0));
-        lambda = (1 - alpha) * tex3D<float>(my_tex, v4, v1_i, v0) + alpha * tex3D<float>(my_tex, v4, v1_i1, v0);
-    }
-
-    printf("Coordinates in texture grid:\n");
-    printf("Cooling value = %lf\n", lambda);
-    return;
+    Coord = ((te_index) + ne_index * (nx) + 0.5);
+    return tex3D<float>(my_tex, Coord, coord_B, coord_H);
 }
 
-__global__ void cooling_function_new(cudaTextureObject_t my_tex, float a0, float a1, float a2, float a3)
-{
-    float v0, v1, v4;
-    double lambda;
-    float a2_index, a3_index;
-    // double t_break = 9.472016;
-    // double t_ubreak = 9.540000;
-    // double t_lbreak = 9.410000;
-    double t_break = 9.472016;
-    double t_ubreak = 9.71875; //para 101
-    double t_lbreak = 9.3125; //para 101
-    float alpha, beta, v4_ij, v4_i1j, v4_ij1, v4_i1j1, v4_i, v4_i1;
-    float v4_ihalfj, v4_ihalfj1, v4_im1j1, v4_im1j, v4_iM1j1, v4_iM1j, v4_im2j1, v4_im2j, v4_iM2j1, v4_iM2j, frac_break, alpha_lower, alpha_upper;
+__device__ double interpolate_ne_te(cudaTextureObject_t my_tex, double H_value, double B_value, double ne_value, double te_value){
+    double coord_H, coord_B, Coord;
+    float te_index, ne_index;
+
+    //double t_break = 9.472016; //para 101
+    //double t_ubreak = 9.540000; //para 101
+    //double t_lbreak = 9.410000; //para 101
+
+    double t_break = 9.472016; //para 33
+    double t_ubreak = 9.71875; //para 33
+    double t_lbreak = 9.3125; //para 33
+    
+    float alpha, beta, Coord_ij, Coord_i1j, Coord_ij1, Coord_i1j1, Coord_i, Coord_i1;
+    float Coord_ihalfj, Coord_ihalfj1, Coord_im1j1, Coord_im1j, Coord_iM1j1, Coord_iM1j, Coord_im2j1, Coord_im2j, Coord_iM2j1, Coord_iM2j, frac_break, alpha_lower, alpha_upper;
 
     const int nw = SIZEOF_H;  // Number of H used to generate table
     const int nx = SIZEOF_TE; // Number of te used to generate table
     const int ny = SIZEOF_NE; // Number of ne used to generate table
     const int nz = SIZEOF_B;  // Number of Bmag used to generate table
 
-        // Calculate both dimensions that are not flattened
-        v0 = ((((a0 - 3.) > 0 ? a0 - 3. : 0) * (nw - 1.) / 5.) + 0.5);
-        v1 = (((a1 - 0.) > 0 ? a1 : 0) * (nz - 1.) / 10. + 0.5);
+    // Calculate both dimensions that are not flattened
+    coord_H = ((((H_value - 3.) > 0 ? H_value - 3. : 0) * (nw - 1.) / 5.) + 0.5);
+    coord_B = (((B_value - 0.) > 0 ? B_value : 0) * (nz - 1.) / 10. + 0.5);
+
+    // Select maximum values separetly
+    if (ne_value > 25)
+    {
+        ne_value = 25;
+    }
+    else if (te_value > 15)
+    {
+        te_value = 15;
+    }
+
+    // These will give us the indexing of B and ne from the table, we gotta see if they are integers or not.
+    te_index = (((te_value - 2.) > 0 ? te_value - 2. : 0) * (nx - 1.) / 13.);
+    ne_index = (((ne_value - 2.) > 0 ? ne_value - 2. : 0) * (ny - 1.) / 23.);
+
+    if (te_index == (int)te_index && ne_index == (int)ne_index)
+    {
+        Coord = ((te_index) + ne_index * (nx) + 0.5);
+        return tex3D<float>(my_tex, Coord, coord_B, coord_H);
+    }
+    else if (te_index != (int)te_index && ne_index != (int)ne_index)
+    {   
+        beta = ne_index - floor(ne_index);
+        alpha = te_index - floor(te_index);
+        if (te_value < t_break && te_value > t_lbreak){
+            frac_break = t_break - t_lbreak;
+            alpha_lower = (te_value - t_lbreak)/frac_break;
+            Coord_ij = (floor(te_index) + floor(ne_index) * (nx) + 0.5);
+            Coord_ij1 = ((floor(te_index)) + (floor(ne_index) + 1) * (nx) + 0.5);
 
 
-        // Select maximum values separetly
-        if (a2 > 25)
-        {
-            a2 = 25;
+            Coord_im2j =((floor(te_index) - 2) + (floor(ne_index))  * (nx) + 0.5);
+            Coord_im1j = ((floor(te_index) - 1) + (floor(ne_index)) * (nx) + 0.5);
+            Coord_ihalfj = 3 * tex3D<float>(my_tex, Coord_ij, coord_B, coord_H) - 3 * tex3D<float>(my_tex, Coord_im1j, coord_B, coord_H) + tex3D<float>(my_tex, Coord_im2j, coord_B, coord_H);
+
+            Coord_im2j1 =((floor(te_index) - 2) + (floor(ne_index) + 1)  * (nx) + 0.5);
+            Coord_im1j1 = ((floor(te_index) - 1) + (floor(ne_index) + 1) * (nx) + 0.5);
+            Coord_ihalfj1 = 3 * tex3D<float>(my_tex, Coord_ij1, coord_B, coord_H) - 3 * tex3D<float>(my_tex, Coord_im1j1, coord_B, coord_H) + tex3D<float>(my_tex, Coord_im2j1, coord_B, coord_H);
+
+            return (1 - alpha_lower) * (1 - beta) * tex3D<float>(my_tex, Coord_ij, coord_B, coord_H) + alpha_lower * (1 - beta) * Coord_ihalfj +
+                    (1 - alpha_lower) * beta * tex3D<float>(my_tex, Coord_ij1, coord_B, coord_H) + alpha_lower * beta * Coord_ihalfj1;                
+
+
+        }else if(te_value >t_break && te_value < t_ubreak){//
+            frac_break = t_ubreak - t_break;
+            alpha_upper = (te_value - t_break)/(frac_break);
+            Coord_ij = ((floor(te_index) + 1) + floor(ne_index) * (nx) + 0.5);
+            Coord_ij1 = ((floor(te_index) + 1) + (floor(ne_index) + 1) * (nx) + 0.5);
+
+
+            Coord_iM2j =((floor(te_index) + 3) + (floor(ne_index))  * (nx) + 0.5);
+            Coord_iM1j = ((floor(te_index) + 2) + (floor(ne_index)) * (nx) + 0.5);
+            Coord_ihalfj = 3 * tex3D<float>(my_tex, Coord_ij, coord_B, coord_H) - 3 * tex3D<float>(my_tex, Coord_iM1j, coord_B, coord_H) + tex3D<float>(my_tex, Coord_iM2j, coord_B, coord_H);
+
+            Coord_iM2j1 =((floor(te_index) + 3) + (floor(ne_index) + 1)  * (nx) + 0.5);
+            Coord_iM1j1 = ((floor(te_index) + 2) + (floor(ne_index) + 1) * (nx) + 0.5);
+            Coord_ihalfj1 = 3 * tex3D<float>(my_tex, Coord_ij1, coord_B, coord_H) - 3 * tex3D<float>(my_tex, Coord_iM1j1, coord_B, coord_H) + tex3D<float>(my_tex, Coord_iM2j1, coord_B, coord_H);
+            return (1 - alpha_upper) * (1 - beta) * Coord_ihalfj + alpha_upper * (1 - beta) * tex3D<float>(my_tex, Coord_ij, coord_B, coord_H) +
+                    (1 - alpha_upper) * beta * Coord_ihalfj1 + alpha_upper * beta * tex3D<float>(my_tex, Coord_ij1, coord_B, coord_H);  
+        }else{//
+            Coord_ij = (floor(te_index) + floor(ne_index) * (nx) + 0.5);
+            Coord_i1j = ((floor(te_index) + 1) + floor(ne_index) * (nx) + 0.5);
+            Coord_ij1 = ((floor(te_index)) + (floor(ne_index) + 1) * (nx) + 0.5);
+            Coord_i1j1 = ((floor(te_index) + 1) + (floor(ne_index) + 1) * (nx) + 0.5);
+            return (1 - alpha) * (1 - beta) * tex3D<float>(my_tex, Coord_ij, coord_B, coord_H) + alpha * (1 - beta) * tex3D<float>(my_tex, Coord_i1j, coord_B, coord_H) +
+                    (1 - alpha) * beta * tex3D<float>(my_tex, Coord_ij1, coord_B, coord_H) + alpha * beta * tex3D<float>(my_tex, Coord_i1j1, coord_B, coord_H);
         }
-        else if (a3 > 15)
-        {
-            a3 = 15;
+    }
+    else if (ne_index != (int)ne_index) //Condition for indexne not integer and indexte being an integer
+    {//
+        alpha = ne_index - floor(ne_index);
+        Coord_i = ((te_index) + floor(ne_index) * (nx) + 0.5);
+        Coord_i1 = ((te_index) + (floor(ne_index) + 1) * (nx) + 0.5);
+        return (1 - alpha) * tex3D<float>(my_tex, Coord_i, coord_B, coord_H) + alpha * tex3D<float>(my_tex, Coord_i1, coord_B, coord_H);
+    }
+    else //Condition for indexte not integer and indexne being an integer
+    {
+        alpha = ne_index - floor(ne_index);
+        if (te_value < t_break && te_value > t_lbreak){//
+            frac_break = t_break - t_lbreak;
+            alpha_lower = (te_value - t_lbreak)/frac_break;
+            Coord_ij = (floor(te_index) + (ne_index) * (nx) + 0.5);
+            Coord_im2j =((floor(te_index) - 2) + (floor(ne_index))  * (nx) + 0.5);
+            Coord_im1j = ((floor(te_index) - 1) + (floor(ne_index)) * (nx) + 0.5);
+            Coord_ihalfj = 3 * tex3D<float>(my_tex, Coord_ij, coord_B, coord_H) - 3 * tex3D<float>(my_tex, Coord_im1j, coord_B, coord_H) + tex3D<float>(my_tex, Coord_im2j, coord_B, coord_H);
+
+            return (1 - alpha_lower) * tex3D<float>(my_tex, Coord_ij, coord_B, coord_H) + alpha_lower * Coord_ihalfj;
+        }else if(te_value >t_break && te_value < t_ubreak){//
+            alpha_upper = (te_value - t_break)/(t_ubreak - t_break);
+            Coord_ij = (floor(te_index + 1) + floor(ne_index) * (nx) + 0.5);
+            Coord_iM2j =((floor(te_index) + 3) + (floor(ne_index))  * (nx) + 0.5);
+            Coord_iM1j = ((floor(te_index) + 2) + (floor(ne_index)) * (nx) + 0.5);
+            Coord_ihalfj = 3 * tex3D<float>(my_tex, Coord_ij, coord_B, coord_H) - 3 * tex3D<float>(my_tex, Coord_iM1j, coord_B, coord_H) + tex3D<float>(my_tex, Coord_iM2j, coord_B, coord_H);
+            return (1 - alpha_upper) * Coord_ihalfj + alpha_upper * tex3D<float>(my_tex, Coord_i1j, coord_B, coord_H);
+
+        }else{//
+            alpha = te_index - floor(te_index);
+            Coord_i = (floor(te_index) + (ne_index) * (nx) + 0.5);
+            Coord_i1 = ((floor(te_index) + 1) + (ne_index) * (nx) + 0.5);
+            return (1 - alpha) * tex3D<float>(my_tex, Coord_i, coord_B, coord_H) + alpha * tex3D<float>(my_tex, Coord_i1, coord_B, coord_H);
         }
+    }
+}
 
-        // These will give us the indexing of B and ne from the table, we gotta see if they are integers or not.
-        a3_index = (((a3 - 2.) > 0 ? a3 - 2. : 0) * (nx - 1.) / 13.);
-        a2_index = (((a2 - 2.) > 0 ? a2 - 2. : 0) * (ny - 1.) / 23.);
-        if (a3_index == (int)a3_index && a2_index == (int)a2_index)
-        {//working
-            printf("Entrada 1, ambos inteiros\n");
-            v4 = ((a3_index) + a2_index * (nx) + 0.5);
-            lambda = tex3D<float>(my_tex, v4, v1, v0);
-        }
-        else if (a3_index != (int)a3_index && a2_index != (int)a2_index)
-        {   
-            printf("Entrada 2, Nenhum inteiro\n");
-            beta = a2_index - floor(a2_index);
-            alpha = a3_index - floor(a3_index);
-            if (a3 < t_break && a3 > t_lbreak){
-                printf("temperatura entre o break e o limite inferior\n"); //working
-                frac_break = t_break - t_lbreak;
-                alpha_lower = (a3 - t_lbreak)/frac_break;
-                v4_ij = (floor(a3_index) + floor(a2_index) * (nx) + 0.5);
-                v4_ij1 = ((floor(a3_index)) + (floor(a2_index) + 1) * (nx) + 0.5);
-
-
-                v4_im2j =((floor(a3_index) - 2) + (floor(a2_index))  * (nx) + 0.5);
-                v4_im1j = ((floor(a3_index) - 1) + (floor(a2_index)) * (nx) + 0.5);
-                v4_ihalfj = 3 * tex3D<float>(my_tex, v4_ij, v1, v0) - 3 * tex3D<float>(my_tex, v4_im1j, v1, v0) + tex3D<float>(my_tex, v4_im2j, v1, v0);
-
-                v4_im2j1 =((floor(a3_index) - 2) + (floor(a2_index) + 1)  * (nx) + 0.5);
-                v4_im1j1 = ((floor(a3_index) - 1) + (floor(a2_index) + 1) * (nx) + 0.5);
-                v4_ihalfj1 = 3 * tex3D<float>(my_tex, v4_ij1, v1, v0) - 3 * tex3D<float>(my_tex, v4_im1j1, v1, v0) + tex3D<float>(my_tex, v4_im2j1, v1, v0);
-                printf("alpha_lower = %lf, beta = %lf v4_ihalfj = %lf, v4_ihalfj1 = %lf \n", alpha_lower, beta, v4_ihalfj, v4_ihalfj1);
-                printf("T(i-2, j) = %lf, T(i-1, j) = %lf, T(i,j) = %lf\n", tex3D<float>(my_tex, v4_im2j, v1, v0), tex3D<float>(my_tex, v4_im1j, v1, v0), tex3D<float>(my_tex, v4_ij, v1, v0));
-                printf("T(i-2, j+1) = %lf, T(i-1, j+1) = %lf, T(i, j+1) = %lf\n", tex3D<float>(my_tex, v4_im2j1, v1, v0), tex3D<float>(my_tex, v4_im1j1, v1, v0), tex3D<float>(my_tex, v4_ij1, v1, v0));
-
-                lambda = (1 - alpha_lower) * (1 - beta) * tex3D<float>(my_tex, v4_ij, v1, v0) + alpha_lower * (1 - beta) * v4_ihalfj +
-                         (1 - alpha_lower) * beta * tex3D<float>(my_tex, v4_ij1, v1, v0) + alpha_lower * beta * v4_ihalfj1;                
-
-            }else if(a3 >t_break && a3 < t_ubreak){//working
-                printf("temperatura entre o break e o limite superior\n");
-                frac_break = t_ubreak - t_break;
-                alpha_upper = (a3 - t_break)/(frac_break);
-                v4_ij = ((floor(a3_index) + 1) + floor(a2_index) * (nx) + 0.5);
-                v4_ij1 = ((floor(a3_index) + 1) + (floor(a2_index) + 1) * (nx) + 0.5);
-
-
-                v4_iM2j =((floor(a3_index) + 3) + (floor(a2_index))  * (nx) + 0.5);
-                v4_iM1j = ((floor(a3_index) + 2) + (floor(a2_index)) * (nx) + 0.5);
-                v4_ihalfj = 3 * tex3D<float>(my_tex, v4_ij, v1, v0) - 3 * tex3D<float>(my_tex, v4_iM1j, v1, v0) + tex3D<float>(my_tex, v4_iM2j, v1, v0);
-
-                v4_iM2j1 =((floor(a3_index) + 3) + (floor(a2_index) + 1)  * (nx) + 0.5);
-                v4_iM1j1 = ((floor(a3_index) + 2) + (floor(a2_index) + 1) * (nx) + 0.5);
-                v4_ihalfj1 = 3 * tex3D<float>(my_tex, v4_ij1, v1, v0) - 3 * tex3D<float>(my_tex, v4_iM1j1, v1, v0) + tex3D<float>(my_tex, v4_iM2j1, v1, v0);
-                printf("alpha_upper = %lf, beta = %lf v4_ihalfj = %lf, v4_ihalfj1 = %lf \n", alpha_upper, beta, v4_ihalfj, v4_ihalfj1);
-                printf("T(i+2, j) = %lf, T(i+1, j) = %lf, T(i,j) = %lf\n", tex3D<float>(my_tex, v4_iM2j, v1, v0), tex3D<float>(my_tex, v4_iM1j, v1, v0), tex3D<float>(my_tex, v4_ij, v1, v0));
-                printf("T(i+2, j+1) = %lf, T(i+1, j+1) = %lf, T(i, j+1) = %lf\n", tex3D<float>(my_tex, v4_iM2j1, v1, v0), tex3D<float>(my_tex, v4_iM1j1, v1, v0), tex3D<float>(my_tex, v4_ij1, v1, v0));
-                lambda = (1 - alpha_upper) * (1 - beta) * v4_ihalfj + alpha_upper * (1 - beta) * tex3D<float>(my_tex, v4_ij, v1, v0) +
-                         (1 - alpha_upper) * beta * v4_ihalfj1 + alpha_upper * beta * tex3D<float>(my_tex, v4_ij1, v1, v0);  
-            }else{//working
-                printf("temperatura longe do break\n");
-                v4_ij = (floor(a3_index) + floor(a2_index) * (nx) + 0.5);
-                v4_i1j = ((floor(a3_index) + 1) + floor(a2_index) * (nx) + 0.5);
-                v4_ij1 = ((floor(a3_index)) + (floor(a2_index) + 1) * (nx) + 0.5);
-                v4_i1j1 = ((floor(a3_index) + 1) + (floor(a2_index) + 1) * (nx) + 0.5);
-                printf("v4_ij = %lf, v4_i1j = %lf, v4_ij1 = %lf, v4_i1j1 = %lf, alpha = %lf, beta = %lf \n", v4_ij, v4_i1j, v4_ij1, v4_i1j1, alpha, beta);
-                printf("ij value = %lf, i1j value = %lf, ij1 value = %lf, i1j1 value = %lf \n",tex3D<float>(my_tex, v4_ij, v1, v0), tex3D<float>(my_tex, v4_i1j, v1, v0), tex3D<float>(my_tex, v4_ij1, v1, v0), tex3D<float>(my_tex, v4_i1j1, v1, v0));
-                lambda = (1 - alpha) * (1 - beta) * tex3D<float>(my_tex, v4_ij, v1, v0) + alpha * (1 - beta) * tex3D<float>(my_tex, v4_i1j, v1, v0) +
-                        (1 - alpha) * beta * tex3D<float>(my_tex, v4_ij1, v1, v0) + alpha * beta * tex3D<float>(my_tex, v4_i1j1, v1, v0);
-            }
-        }
-        else if (a2_index != (int)a2_index) //Condition for indexne not integer and indexte being an integer
-        { //working
-            printf("Entrada 3, ne não é inteiro \n");
-            alpha = a2_index - floor(a2_index);
-            v4_i = ((a3_index) + floor(a2_index) * (nx) + 0.5);
-            v4_i1 = ((a3_index) + (floor(a2_index) + 1) * (nx) + 0.5);
-            lambda = (1 - alpha) * tex3D<float>(my_tex, v4_i, v1, v0) + alpha * tex3D<float>(my_tex, v4_i1, v1, v0);
-        }
-        else //Condition for indexte not integer and indexne being an integer
-        { //working
-            printf("Entrada 4, Te não é inteiro \n");
-            if (a3 < t_break && a3 > t_lbreak){
-                printf("temperatura entre o break e o limite inferior\n"); 
-                frac_break = t_break - t_lbreak;
-                alpha_lower = (a3 - t_lbreak)/frac_break;
-                v4_ij = (floor(a3_index) + (a2_index) * (nx) + 0.5);
-                v4_im2j =((floor(a3_index) - 2) + (floor(a2_index))  * (nx) + 0.5);
-                v4_im1j = ((floor(a3_index) - 1) + (floor(a2_index)) * (nx) + 0.5);
-                v4_ihalfj = 3 * tex3D<float>(my_tex, v4_ij, v1, v0) - 3 * tex3D<float>(my_tex, v4_im1j, v1, v0) + tex3D<float>(my_tex, v4_im2j, v1, v0);
-                printf("T(i-2) = %lf, T(i-1) = %lf, T(i) = %lf\n", tex3D<float>(my_tex, v4_im2j, v1, v0), tex3D<float>(my_tex, v4_im1j, v1, v0), tex3D<float>(my_tex, v4_ij, v1, v0));
-                printf("alpha = %lf, frac_break = %lf, alpha_upper = %lf, v4_ij = %lf, v4_iM2j = %lf, v4_iM1j = %lf, v4_ihalfj = %lf \n", alpha, frac_break, alpha_lower, v4_ij, v4_im2j, v4_im1j, v4_ihalfj);
-
-                lambda = (1 - alpha_lower) * tex3D<float>(my_tex, v4_ij, v1, v0) + alpha_lower * v4_ihalfj;
-            }else if(a3 >t_break && a3 < t_ubreak){ //working
-                printf("temperatura entre o break e o limite superior\n"); //quanto menor o alpha, maior a importancia do T[i];
-                frac_break = t_ubreak - t_break;
-                alpha_upper = (a3 - t_break)/(frac_break);
-                v4_ij = (floor(a3_index + 1) + floor(a2_index) * (nx) + 0.5);
-                v4_iM2j =((floor(a3_index) + 3) + (floor(a2_index))  * (nx) + 0.5);
-                v4_iM1j = ((floor(a3_index) + 2) + (floor(a2_index)) * (nx) + 0.5);
-                v4_ihalfj = 3 * tex3D<float>(my_tex, v4_ij, v1, v0) - 3 * tex3D<float>(my_tex, v4_iM1j, v1, v0) + tex3D<float>(my_tex, v4_iM2j, v1, v0);
-                printf("T(i+2) = %lf, T(i+1) = %lf, T(i) = %lf\n", tex3D<float>(my_tex, v4_iM2j, v1, v0), tex3D<float>(my_tex, v4_iM1j, v1, v0), tex3D<float>(my_tex, v4_ij, v1, v0));
-                printf("alpha = %lf, frac_break = %lf, alpha_upper = %lf, v4_ij = %lf, v4_iM2j = %lf, v4_iM1j = %lf, v4_ihalfj = %lf \n", alpha, frac_break, alpha_upper, v4_ij, v4_iM2j, v4_iM1j, v4_ihalfj);
-                lambda = (1 - alpha_upper) * v4_ihalfj + alpha_upper * tex3D<float>(my_tex, v4_i1j, v1, v0);
-
-            }else{ //working
-                printf("temperatura longe do break\n");
-                alpha = a3_index - floor(a3_index);
-                v4_i = (floor(a3_index) + (a2_index) * (nx) + 0.5);
-                v4_i1 = ((floor(a3_index) + 1) + (a2_index) * (nx) + 0.5);
-                printf("v4_i = %lf, v4_i1 = %lf, alpha = %lf \n", v4_i, v4_i1, alpha);
-                lambda = (1 - alpha) * tex3D<float>(my_tex, v4_i, v1, v0) + alpha * tex3D<float>(my_tex, v4_i1, v1, v0);
-            }
-        }
-
-    printf("Coordinates in texture grid:\n");
-    printf("Cooling value = %lf\n", lambda);
+__global__ void cooling_function(cudaTextureObject_t my_tex, float H, float B, float ne, float te)
+{
+    printf("Cooling value = %lf\n", interpolate_ne_te(my_tex, H, B, ne, te));
     return;
 }
 
-__global__ void cooling_function_marcel(cudaTextureObject_t my_tex, float a0, double *a1, double *a2, double *value)
+__global__ void cooling_function_marcel(cudaTextureObject_t my_tex, float H, double *a1, double *a2, double *value)
 {
-    float v0, v1, v4;
     double ne_test, B_test, mu = 0.1;
-    const int nw = SIZEOF_H;  // Number of H used to generate table
-    const int nx = SIZEOF_TE; // Number of te used to generate table
-    const int ny = SIZEOF_NE; // Number of ne used to generate table
-    const int nz = SIZEOF_B;  // Number of Bmag used to generate table
-    //  v0 = (round((v0 - 3) * (nz - 1)/5) + 0.5)/nw; //scale_height
-    //  v1 = (round((v1 - 0) * (nz - 1)/10) + 0.5)/nz; // Bmag
-    //  v4 = ((round((v3 -2) * (nx - 1)/13) + 0.5) + round((v2 - 10) * (ny - 1)/15) * nx)/(nx * ny); //Te + ne
+    
     for (int i = 0; i < 20; i++)
     {
-        ne_test = a1[i] / (a0 * THOMSON_CGS);
+        ne_test = a1[i] / (H * THOMSON_CGS);
         for (int k = 0; k < 20; k++)
         {
             B_test = sqrt(2 * mu * BOLTZ_CGS * ne_test * a2[k]);
-            // v0 = (round((log10(a0) - 3.) * (nw - 1.)/5.) + 0.5)/nw;
-            // v1 = (round((log10(ne_test) - 10.) * (ny - 1.)/15.) + 0.5 + round((log10(B_test) - 0.) * (nz - 1.)/10.) * ny)/(nz * ny);
-            // v4 = (round((log10(a2[k]) - 2.) * (nx - 1.)/13.) + 0.5)/nx;
-            v0 = (round((log10(a0) - 5.) * (nw - 1.) / 3.) + 0.5) / nw;
-            v1 = (round((log10(ne_test) - 8.) * (ny - 1.) / 15.) + 0.5 + round((log10(B_test) - 0.) * (nz - 1.) / 10.) * ny) / (nz * ny);
-            v4 = (round((log10(a2[k]) - 2.) * (nx - 1.) / 13.) + 0.5) / nx;
-            value[20 * i + k] = tex3D<float>(my_tex, v4, v1, v0);
+            value[20 * i + k] = interpolate_ne_te(my_tex, log10(H), log10(B_test), log10(ne_test), log10(a2[k]));
         }
     }
     return;
 }
 
-__global__ void cooling_function_test_new(cudaTextureObject_t my_tex, double *a0, double *a1, double *a2, double *a3, double *value)
+
+__global__ void cooling_function_test(cudaTextureObject_t my_tex, double * H, double * B, double * ne, double *te, double *value)
 {
-    double v0, v1, v4;
-    double lambda;
     int i;
-    float a2_index, a3_index;
 
-    double t_break = 9.472016;
-    double t_ubreak = 9.540000;
-    double t_lbreak = 9.410000;
-
-    // double t_break = 9.472016;
-    // double t_ubreak = 9.71875; //para 101
-    // double t_lbreak = 9.3125; //para 101
-    
-    float alpha, beta, v4_ij, v4_i1j, v4_ij1, v4_i1j1, v4_i, v4_i1;
-    float v4_ihalfj, v4_ihalfj1, v4_im1j1, v4_im1j, v4_iM1j1, v4_iM1j, v4_im2j1, v4_im2j, v4_iM2j1, v4_iM2j, frac_break, alpha_lower, alpha_upper;
-
-    // For the normalized version only.
-    const int nw = SIZEOF_H;  // Number of H used to generate table
-    const int nx = SIZEOF_TE; // Number of te used to generate table
-    const int ny = SIZEOF_NE; // Number of ne used to generate table
-    const int nz = SIZEOF_B;  // Number of Bmag used to generate table
     for (i = 0; i < N_RESOLUTION; i++){
-    
-        // Calculate both dimensions that are not flattened
-        v0 = ((((a0[i] - 3.) > 0 ? a0[i] - 3. : 0) * (nw - 1.) / 5.) + 0.5);
-        v1 = (((a1[i] - 0.) > 0 ? a1[i] : 0) * (nz - 1.) / 10. + 0.5);
-
-
-        // Select maximum values separetly
-        if (a2[i] > 25)
-        {
-            a2[i] = 25;
-        }
-        else if (a3[i] > 15)
-        {
-            a3[i] = 15;
-        }
-
-        // These will give us the indexing of B and ne from the table, we gotta see if they are integers or not.
-        a3_index = (((a3[i] - 2.) > 0 ? a3[i] - 2. : 0) * (nx - 1.) / 13.);
-        a2_index = (((a2[i] - 2.) > 0 ? a2[i] - 2. : 0) * (ny - 1.) / 23.);
-  
-        if (a3_index == (int)a3_index && a2_index == (int)a2_index)
-        {
-            v4 = ((a3_index) + a2_index * (nx) + 0.5);
-            lambda = tex3D<float>(my_tex, v4, v1, v0);
-        }
-        else if (a3_index != (int)a3_index && a2_index != (int)a2_index)
-        {   
-            beta = a2_index - floor(a2_index);
-            alpha = a3_index - floor(a3_index);
-            if (a3[i] < t_break && a3[i] > t_lbreak){
-                frac_break = t_break - t_lbreak;
-                alpha_lower = (a3[i] - t_lbreak)/frac_break;
-                v4_ij = (floor(a3_index) + floor(a2_index) * (nx) + 0.5);
-                v4_ij1 = ((floor(a3_index)) + (floor(a2_index) + 1) * (nx) + 0.5);
-
-
-                v4_im2j =((floor(a3_index) - 2) + (floor(a2_index))  * (nx) + 0.5);
-                v4_im1j = ((floor(a3_index) - 1) + (floor(a2_index)) * (nx) + 0.5);
-                v4_ihalfj = 3 * tex3D<float>(my_tex, v4_ij, v1, v0) - 3 * tex3D<float>(my_tex, v4_im1j, v1, v0) + tex3D<float>(my_tex, v4_im2j, v1, v0);
-
-                v4_im2j1 =((floor(a3_index) - 2) + (floor(a2_index) + 1)  * (nx) + 0.5);
-                v4_im1j1 = ((floor(a3_index) - 1) + (floor(a2_index) + 1) * (nx) + 0.5);
-                v4_ihalfj1 = 3 * tex3D<float>(my_tex, v4_ij1, v1, v0) - 3 * tex3D<float>(my_tex, v4_im1j1, v1, v0) + tex3D<float>(my_tex, v4_im2j1, v1, v0);
-
-                lambda = (1 - alpha_lower) * (1 - beta) * tex3D<float>(my_tex, v4_ij, v1, v0) + alpha_lower * (1 - beta) * v4_ihalfj +
-                         (1 - alpha_lower) * beta * tex3D<float>(my_tex, v4_ij1, v1, v0) + alpha_lower * beta * v4_ihalfj1;                
-          
-
-            }else if(a3[i] >t_break && a3[i] < t_ubreak){//
-                frac_break = t_ubreak - t_break;
-                alpha_upper = (a3[i] - t_break)/(frac_break);
-                v4_ij = ((floor(a3_index) + 1) + floor(a2_index) * (nx) + 0.5);
-                v4_ij1 = ((floor(a3_index) + 1) + (floor(a2_index) + 1) * (nx) + 0.5);
-
-
-                v4_iM2j =((floor(a3_index) + 3) + (floor(a2_index))  * (nx) + 0.5);
-                v4_iM1j = ((floor(a3_index) + 2) + (floor(a2_index)) * (nx) + 0.5);
-                v4_ihalfj = 3 * tex3D<float>(my_tex, v4_ij, v1, v0) - 3 * tex3D<float>(my_tex, v4_iM1j, v1, v0) + tex3D<float>(my_tex, v4_iM2j, v1, v0);
-
-                v4_iM2j1 =((floor(a3_index) + 3) + (floor(a2_index) + 1)  * (nx) + 0.5);
-                v4_iM1j1 = ((floor(a3_index) + 2) + (floor(a2_index) + 1) * (nx) + 0.5);
-                v4_ihalfj1 = 3 * tex3D<float>(my_tex, v4_ij1, v1, v0) - 3 * tex3D<float>(my_tex, v4_iM1j1, v1, v0) + tex3D<float>(my_tex, v4_iM2j1, v1, v0);
-                lambda = (1 - alpha_upper) * (1 - beta) * v4_ihalfj + alpha_upper * (1 - beta) * tex3D<float>(my_tex, v4_ij, v1, v0) +
-                         (1 - alpha_upper) * beta * v4_ihalfj1 + alpha_upper * beta * tex3D<float>(my_tex, v4_ij1, v1, v0);  
-            }else{//
-                v4_ij = (floor(a3_index) + floor(a2_index) * (nx) + 0.5);
-                v4_i1j = ((floor(a3_index) + 1) + floor(a2_index) * (nx) + 0.5);
-                v4_ij1 = ((floor(a3_index)) + (floor(a2_index) + 1) * (nx) + 0.5);
-                v4_i1j1 = ((floor(a3_index) + 1) + (floor(a2_index) + 1) * (nx) + 0.5);
-                lambda = (1 - alpha) * (1 - beta) * tex3D<float>(my_tex, v4_ij, v1, v0) + alpha * (1 - beta) * tex3D<float>(my_tex, v4_i1j, v1, v0) +
-                        (1 - alpha) * beta * tex3D<float>(my_tex, v4_ij1, v1, v0) + alpha * beta * tex3D<float>(my_tex, v4_i1j1, v1, v0);
-            }
-        }
-        else if (a2_index != (int)a2_index) //Condition for indexne not integer and indexte being an integer
-        {//
-            alpha = a2_index - floor(a2_index);
-            v4_i = ((a3_index) + floor(a2_index) * (nx) + 0.5);
-            v4_i1 = ((a3_index) + (floor(a2_index) + 1) * (nx) + 0.5);
-            lambda = (1 - alpha) * tex3D<float>(my_tex, v4_i, v1, v0) + alpha * tex3D<float>(my_tex, v4_i1, v1, v0);
-        }
-        else //Condition for indexte not integer and indexne being an integer
-        {
-            alpha = a2_index - floor(a2_index);
-            if (a3[i] < t_break && a3[i] > t_lbreak){//
-                frac_break = t_break - t_lbreak;
-                alpha_lower = (a3[i] - t_lbreak)/frac_break;
-                v4_ij = (floor(a3_index) + (a2_index) * (nx) + 0.5);
-                v4_im2j =((floor(a3_index) - 2) + (floor(a2_index))  * (nx) + 0.5);
-                v4_im1j = ((floor(a3_index) - 1) + (floor(a2_index)) * (nx) + 0.5);
-                v4_ihalfj = 3 * tex3D<float>(my_tex, v4_ij, v1, v0) - 3 * tex3D<float>(my_tex, v4_im1j, v1, v0) + tex3D<float>(my_tex, v4_im2j, v1, v0);
-
-                lambda = (1 - alpha_lower) * tex3D<float>(my_tex, v4_ij, v1, v0) + alpha_lower * v4_ihalfj;
-                lambda = (1 - alpha) * tex3D<float>(my_tex, v4_ij, v1, v0) + alpha * v4_ihalfj;
-            }else if(a3[i] >t_break && a3[i] < t_ubreak){//
-                alpha_upper = (a3[i] - t_break)/(t_ubreak - t_break);
-                v4_ij = (floor(a3_index + 1) + floor(a2_index) * (nx) + 0.5);
-                v4_iM2j =((floor(a3_index) + 3) + (floor(a2_index))  * (nx) + 0.5);
-                v4_iM1j = ((floor(a3_index) + 2) + (floor(a2_index)) * (nx) + 0.5);
-                v4_ihalfj = 3 * tex3D<float>(my_tex, v4_ij, v1, v0) - 3 * tex3D<float>(my_tex, v4_iM1j, v1, v0) + tex3D<float>(my_tex, v4_iM2j, v1, v0);
-                lambda = (1 - alpha_upper) * v4_ihalfj + alpha_upper * tex3D<float>(my_tex, v4_i1j, v1, v0);
-
-            }else{//
-                alpha = a3_index - floor(a3_index);
-                v4_i = (floor(a3_index) + (a2_index) * (nx) + 0.5);
-                v4_i1 = ((floor(a3_index) + 1) + (a2_index) * (nx) + 0.5);
-                lambda = (1 - alpha) * tex3D<float>(my_tex, v4_i, v1, v0) + alpha * tex3D<float>(my_tex, v4_i1, v1, v0);
-            }
-        }
-        value[i] = lambda;
-    }
-    
-    return;
-}
-
-__global__ void cooling_function_test(cudaTextureObject_t my_tex, double *a0, double *a1, double *a2, double *a3, double *value)
-{
-    double v0, v1, v4;
-    double lambda;
-    int i;
-
-    // For the normalized version only.
-    const int nw = SIZEOF_H;  // Number of H used to generate table
-    const int nx = SIZEOF_TE; // Number of te used to generate table
-    const int ny = SIZEOF_NE; // Number of ne used to generate table
-    const int nz = SIZEOF_B;  // Number of Bmag used to generate table
-    for (i = 0; i < N_RESOLUTION; i++)
-    {
-
-
-        // Because we are going to interpolate manually, we need to define the lists that will hold the value for the parameters (same as table)
-        float listofa1[SIZEOF_B];
-        float listofa2[SIZEOF_NE];
-        float a1_index, a2_index;
-
-        // Generate the values used in the table by both parameters B and ne
-        linspace(0, 10, SIZEOF_B, listofa1);
-        linspace(2, 25, SIZEOF_NE, listofa2);
-
-        // Calculate both dimensions that are not flattened
-        v0 = (floor(((a0[i] - 3.) > 0 ? a0[i] - 3. : 0) * (nw - 1.) / 5.) + 0.5);
-
-        //Interpolação da temperatura devido a não continuidade da função síncrotron, a quebra acontece em
-        double t_break = 7.7730466;
-        double t_ubreak = 7.85;
-        double t_lbreak = 7.72;
-
-
-         if (a3[i] < t_break && a3[i] > t_lbreak){
-            double v4_indexim2 =(floor(((a3[i] - 2.) > 0 ? a3[i] - 2. : 0) * (nx - 1.) / 13.) - 1 + 0.5); //= (((a3[i] - 2.) > 0 ? a3[i] - 2. : 0) * (nx - 1.) / 13.);
-            double v4_indexim1 = (floor(((a3[i] - 2.) > 0 ? a3[i] - 2. : 0) * (nx - 1.) / 13.) + 0.5);
-            double 
-            v4 = (floor(((a3[i] - 2.) > 0 ? a3[i] - 2. : 0) * (nx - 1.) / 13.) + 0.5);
-        }else if (a3[i] >t_break && a3[i] < t_ubreak){
-            v4 =  (floor(((a3[i] - 2.) > 0 ? a3[i] - 2. : 0) * (nx - 1.) / 13.) + 1 + 0.5);
-        }else{
-            v4 = (floor(((a3[i] - 2.) > 0 ? a3[i] - 2. : 0) * (nx - 1.) / 13.) + 0.5);
-        }
-
-        // if (a3[i] < 7.7730466 && a3[i] > 7.72){
-        //     v4 = (floor(((a3[i] - 2.) > 0 ? a3[i] - 2. : 0) * (nx - 1.) / 13.) + 0.5);
-        // }else if (a3[i] >7.7730466 && a3[i] < 7.85){
-        //     v4 =  (floor(((a3[i] - 2.) > 0 ? a3[i] - 2. : 0) * (nx - 1.) / 13.) + 1 + 0.5);
-        // }else{
-        //     v4 = (floor(((a3[i] - 2.) > 0 ? a3[i] - 2. : 0) * (nx - 1.) / 13.) + 0.5);
-        // }
-        //v4 = (floor(((a3[i] - 2.) > 0 ? a3[i] - 2. : 0) * (nx - 1.) / 13.) + 0.5);
-        // Select maximum values separetly
-        if (a1[i] > 10)
-        {
-            a1[i] = 10;
-        }
-        else if (a2[i] > 25)
-        {
-            a2[i] = 25;
-        }
-
-        //v1 = (floor(((a2[i] - 2.) > 0 ? a2[i] - 2. : 0) * (ny - 1.) / 23.) + floor((a1[i] - 0.) * (nz - 1.) / 10.) * (ny) + 0.5);
-
-        // These will give us the indexing of B and ne from the table, we gotta see if they are integers or not.
-        a1_index = (((a1[i] - 0.) > 0 ? a1[i] : 0) * (nz - 1.) / 10.);
-        a2_index = (((a2[i] - 2.) > 0 ? a2[i] - 2. : 0) * (ny - 1.) / 23.);
-
-        if (a1_index == (int)a1_index && a2_index == (int)a2_index)
-        {
-            v1 = ((((a2[i] - 2.) > 0 ? a2[i] - 2. : 0) * (ny - 1.) / 23.) + ((a1[i] - 0.) * (nz - 1.) / 10.) * (ny) + 0.5);
-            lambda = tex3D<float>(my_tex, v4, v1, v0);
-        }
-        else if (a1_index != (int)a1_index && a2_index != (int)a2_index)
-        {
-            float alpha, beta, v1_ij, v1_i1j, v1_ij1, v1_i1j1;
-            beta = a1_index - floor(a1_index);
-            alpha = a2_index - floor(a2_index);
-
-            v1_ij = (floor(((a2[i] - 2.) > 0 ? a2[i] - 2. : 0) * (ny - 1.) / 23.) + floor((a1[i] - 0.) * (nz - 1.) / 10.) * (ny) + 0.5);
-            v1_i1j = ((floor(((a2[i] - 2.) > 0 ? a2[i] - 2. : 0) * (ny - 1.) / 23.) + 1) + floor((a1[i] - 0.) * (nz - 1.) / 10.) * (ny) + 0.5);
-            v1_ij1 = ((floor(((a2[i] - 2.) > 0 ? a2[i] - 2. : 0) * (ny - 1.) / 23.)) + (floor((a1[i] - 0.) * (nz - 1.) / 10.) + 1) * (ny) + 0.5);
-            v1_i1j1 = ((floor(((a2[i] - 2.) > 0 ? a2[i] - 2. : 0) * (ny - 1.) / 23.) + 1) + (floor((a1[i] - 0.) * (nz - 1.) / 10.) + 1) * (ny) + 0.5);
-
-            lambda = (1 - alpha) * (1 - beta) * tex3D<float>(my_tex, v4, v1_ij, v0) + alpha * (1 - beta) * tex3D<float>(my_tex, v4, v1_i1j, v0) +
-                     (1 - alpha) * beta * tex3D<float>(my_tex, v4, v1_ij1, v0) + alpha * beta * tex3D<float>(my_tex, v4, v1_i1j1, v0);
-        }
-        else if (a1_index != (int)a1_index) //Condition for indexB not integer and indexNe being an integer
-        {
-            float alpha, v1_i, v1_i1;
-            alpha = a1_index - floor(a1_index);
-            v1_i = ((((a2[i] - 2.) > 0 ? a2[i] - 2. : 0) * (ny - 1.) / 23.) + floor((a1[i] - 0.) * (nz - 1.) / 10.) * (ny) + 0.5);
-            v1_i1 = ((((a2[i] - 2.) > 0 ? a2[i] - 2. : 0) * (ny - 1.) / 23.) + (floor((a1[i] - 0.) * (nz - 1.) / 10.) + 1) * (ny) + 0.5);
-            lambda = (1 - alpha) * tex3D<float>(my_tex, v4, v1_i, v0) + alpha * tex3D<float>(my_tex, v4, v1_i1, v0);
-        }
-        else //Condition for indexNe not integer and indexB being an integer
-        {
-            float alpha, v1_i, v1_i1;
-            alpha = a2_index - floor(a2_index);
-            v1_i = (floor(((a2[i] - 2.) > 0 ? a2[i] - 2. : 0) * (ny - 1.) / 23.) + ((a1[i] - 0.) * (nz - 1.) / 10.) * (ny) + 0.5);
-            v1_i1 = ((floor(((a2[i] - 2.) > 0 ? a2[i] - 2. : 0) * (ny - 1.) / 23.) + 1) + ((a1[i] - 0.) * (nz - 1.) / 10.) * (ny) + 0.5);
-            lambda = (1 - alpha) * tex3D<float>(my_tex, v4, v1_i, v0) + alpha * tex3D<float>(my_tex, v4, v1_i1, v0);
-        }
-        value[i] = lambda;
+        value[i] = interpolate_ne_te(my_tex, H[i], B[i], ne[i], te[i]);
     }
     return;
 }
@@ -694,6 +363,8 @@ __global__ void global_memory_reading(double *parameterH, double *parameterB, do
                 {
                     int indexTe = binarySearchClosest(Te_list, SIZEOF_TE, parameterTe[l]);
                     value[INDEX(indexH, indexB, indexNe, indexTe)] = cooling[INDEX(indexH, indexB, indexNe, indexTe)];
+                    //printf("H = %le, B = %le, ne = %le, Te = %le, cooling = %le\n", parameterH[i], parameterB[j], parameterNe[k], parameterTe[l], value[INDEX(indexH, indexB, indexNe, indexTe)]);
+
                 }
             }
         }
@@ -712,16 +383,8 @@ void logspace(double start, double end, int num, double *result)
     }
 }
 
-__global__ void cooling_function_comparison_global(cudaTextureObject_t my_tex, double *a0, double *a1, double *a2, double *a3, double *value)
+__global__ void cooling_function_comparison_global(cudaTextureObject_t my_tex, double *H, double *B, double *ne, double *te, double *value)
 {
-    double v0, v1, v4;
-    double lambda;
-    // For the normalized version only.
-    const int nw = SIZEOF_H;  // Number of H used to generate table
-    const int nx = SIZEOF_TE; // Number of te used to generate table
-    const int ny = SIZEOF_NE; // Number of ne used to generate table
-    const int nz = SIZEOF_B;  // Number of Bmag used to generate table
-
     for (int i = 0; i < SIZEOF_TEST; i++)
     {
         for (int j = 0; j < SIZEOF_TEST; j++)
@@ -730,11 +393,9 @@ __global__ void cooling_function_comparison_global(cudaTextureObject_t my_tex, d
             {
                 for (int l = 0; l < SIZEOF_TEST; l++)
                 {
-                    v0 = (floor(((a0[i] - 5.) > 0 ? a0[i] - 5. : 0) * (nw - 1.) / 3.) + 0.5);
-                    v1 = (floor(((a2[k] - 2.) > 0 ? a2[k] - 2. : 0) * (ny - 1.) / 23.) + floor((a1[j] - 0.) * (nz - 1.) / 10.) * (ny) + 0.5);
-                    v4 = (floor(((a3[l] - 2.) > 0 ? a3[l] - 2. : 0) * (nx - 1.) / 13.) + 0.5);
-                    lambda = tex3D<float>(my_tex, v4, v1, v0);
-                    value[INDEX(i, j, k, l)] = lambda;
+                    //value[INDEX(i, j, k, l)] = interpolate_ne_te(my_tex, H[i], B[j], ne[k], te[l]);
+                    value[INDEX(i, j, k, l)] = no_interpolation(my_tex, H[i], B[j], ne[k], te[l]);
+                    //printf("H = %le, B = %le, ne = %le, Te = %le, cooling = %le\n", H[i], B[j], ne[k], te[l], value[INDEX(i, j, k, l)]);
                 }
             }
         }
@@ -746,7 +407,6 @@ int main()
 #if (SINGLE_TEST)
     float read0, read1, read2, read3;
     float loop = 100;
-    float *value;
 
     char str[1];
     CreateTexture();
@@ -760,7 +420,7 @@ int main()
         scanf("%f", &read2);
         fprintf(stderr,"Te value:\n");
         scanf("%f", &read3);
-        cooling_function_new<<<1, 1>>>(coolTexObj, read0, read1, read2, read3);
+        cooling_function<<<1, 1>>>(coolTexObj, read0, read1, read2, read3);
         cudaDeviceSynchronize();
         fprintf(stderr,"Do you want to read other values? y/n\n");
         scanf("%s", str);
@@ -832,7 +492,7 @@ int main()
     cudaMemcpy(d_Te_test, Te_test, N_RESOLUTION * sizeof(double), cudaMemcpyHostToDevice);
     fprintf(stderr, "Reading and getting values from texture memory...\n");
 
-    cooling_function_test_new<<<1, 1>>>(coolTexObj, d_H_test, d_B_test, d_ne_test, d_Te_test, d_cool_test);
+    cooling_function_test<<<1, 1>>>(coolTexObj, d_H_test, d_B_test, d_ne_test, d_Te_test, d_cool_test);
     cudaMemcpy(cool_test, d_cool_test, N_RESOLUTION * sizeof(double), cudaMemcpyDeviceToHost);
 
     for (i = 0; i < N_RESOLUTION; i++)
@@ -935,15 +595,15 @@ int main()
     cudaMalloc(&d_results, SIZEOF_TEST * sizeof(double));
     fprintf(stderr,"Initializing GLOBAL MEMORY testing\n");
     FILE *file_height_test;
-    file_height_test = fopen("scale_height.txt", "r");
+    file_height_test = fopen("scale_height_33.txt", "r");
     FILE *file_e_density_test;
-    file_e_density_test = fopen("ne.txt", "r");
+    file_e_density_test = fopen("ne_33.txt", "r");
     FILE *file_temperature_test;
-    file_temperature_test = fopen("te.txt", "r");
+    file_temperature_test = fopen("te_33.txt", "r");
     FILE *file_mag_field_test;
-    file_mag_field_test = fopen("mag.txt", "r");
+    file_mag_field_test = fopen("mag_33.txt", "r");
     FILE *file_cooling_test;
-    file_cooling_test = fopen("cooling_table.bin", "rb");
+    file_cooling_test = fopen("cooling_table_33_05.bin", "rb");
     for (i = 0; fscanf(file_height_test, "%lf", H_test + i) == 1; i++)
     {
         // Do nothing inside the loop body, everything is done in the for loop header
@@ -983,19 +643,20 @@ int main()
     CreateTexture();
 
     fprintf(stderr,"Starting table lookup...\n");
+
+    start_time = clock();
+    //cooling_function_comparison_global<<<1, 1>>>(coolTexObj, d_H_random, d_B_random, d_Ne_random, d_Te_random, d_results);
+    cudaDeviceSynchronize();
+    end_time = clock();
+    duration = (double)(end_time - start_time) / CLOCKS_PER_SEC;
+    fprintf(stderr,"Number of values analyzed = %d, duration texture: %.6f seconds\n", SIZEOF_TEST, duration);
+
     start_time = clock();
     global_memory_reading<<<1, 1>>>(d_H_random, d_B_random, d_Ne_random, d_Te_random, d_H_test, d_B_test, d_ne_test, d_Te_test, d_cool_test, d_results);
     cudaDeviceSynchronize();
     end_time = clock();
     duration = (double)(end_time - start_time) / CLOCKS_PER_SEC;
     fprintf(stderr,"Number of values analyzed = %d, duration global: %.6f seconds\n", SIZEOF_TEST, duration);
-
-    start_time = clock();
-    cooling_function_comparison_global<<<1, 1>>>(coolTexObj, d_H_random, d_B_random, d_Ne_random, d_Te_random, d_results);
-    cudaDeviceSynchronize();
-    end_time = clock();
-    duration = (double)(end_time - start_time) / CLOCKS_PER_SEC;
-    fprintf(stderr,"Number of values analyzed = %d, duration texture: %.6f seconds\n", SIZEOF_TEST, duration);
 
 #endif
     return 0;
