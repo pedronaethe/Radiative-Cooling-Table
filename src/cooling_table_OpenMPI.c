@@ -31,7 +31,7 @@
 #define BREMSTRAHLUNGTEST (0) //Generates a table for bremmstrahlung equation
 #define ABSORPTIONTEST (0) //Generates a table with absorption values
 #define COULOMBTEST (0) //Generates a table with coulomb values
-#define PRINT_BINARY (1) // Whether to print in binary or txt file
+#define PRINT_BINARY (0) // Whether to print in binary or txt file
 
 
 /*Switches to change between table generation and test, for table generation put everything 0*/
@@ -45,14 +45,17 @@
 
 
 /*Size of the table, depend of parameters*/
-#define PARAMETER_H (33)
-#define PARAMETER_B (33)
-#define PARAMETER_NE (33)
-#define PARAMETER_TE (33)
+#define PARAMETER_H (40 + 1)
+#define PARAMETER_B (40 + 1)
+#define PARAMETER_NE (40 + 1)
+#define PARAMETER_TE (40 + 1)
+
+#define PARAMETER_NE_COULOMB (200 + 1)
+#define PARAMETER_TE_COULOMB (200 + 1)
 
 /*Indexing of 3D and 4D arrays for cooling/coulomb tables*/
 #define INDEX (l + PARAMETER_TE * (k + PARAMETER_NE * (j + PARAMETER_B * i)))
-#define INDEX_COULOMB (k + PARAMETER_TE * (j + PARAMETER_TE * i))
+#define INDEX_COULOMB (k + PARAMETER_TE_COULOMB * (j + PARAMETER_TE_COULOMB * i))
 
 /*Routine parameters for bessel/gamma functions*/
 #define ITMAX (1e8)  
@@ -688,9 +691,10 @@ double coulomb_heating(double etemp, double itemp, double edens)
 
 		result = coeff / (K2e * K2i) * ((2. * th_sum * th_sum + 1.) / th_sum * K1 + 2. * K0);
 	}
-	if (!isfinite(result)) result = 0.;
-    printf("Result in coulomb collisions is inf, setting it to 0");
-
+	if (!isfinite(result)){
+        result = 0.;
+        printf("Result in coulomb collisions is inf, setting it to 0\n");
+    }
 	return (result);
 
 }
@@ -912,8 +916,9 @@ int main(int argc, char** argv)
         /*Dividing the calculation among MPI processes equally. If the number of parameters is not evenly divisible among processes, the remainder is assigned to the last rank.
         Coulomb collisions require different distribuition, since it is one parameter shorter*/
         #if(COULOMBTEST)
-        local_size = PARAMETER_NE / size;
-        int remainder = PARAMETER_NE % size;
+        double ne_values_C[PARAMETER_NE_COULOMB], Te_values_C[PARAMETER_NE_COULOMB];
+        local_size = PARAMETER_NE_COULOMB / size;
+        int remainder = PARAMETER_NE_COULOMB % size;
         local_start = rank * local_size;
         local_end = local_start + local_size;
         if (rank == size - 1) {
@@ -938,12 +943,11 @@ int main(int argc, char** argv)
         /*Defining local arrays for each MPI process and a global array that will be established in rank 0 and will hold all the other values*/
         #if(COULOMBTEST)
         double *coulomb_values_local;
-        coulomb_values_local = (double *) malloc (PARAMETER_NE * PARAMETER_TE * PARAMETER_TE * sizeof(double));
+        coulomb_values_local = (double *) malloc (PARAMETER_NE_COULOMB * PARAMETER_TE_COULOMB * PARAMETER_TE_COULOMB * sizeof(double));
         // Set all elements to 0
-        memset(coulomb_values_local, 0,  PARAMETER_NE * PARAMETER_TE * PARAMETER_TE * sizeof(double));
-
+        memset(coulomb_values_local, 0,  PARAMETER_NE_COULOMB * PARAMETER_TE_COULOMB * PARAMETER_TE_COULOMB * sizeof(double));
         double *coulomb_values_all;
-        coulomb_values_all= (double *) malloc (PARAMETER_NE * PARAMETER_TE * PARAMETER_TE * sizeof(double));
+        coulomb_values_all= (double *) malloc (PARAMETER_NE_COULOMB * PARAMETER_TE_COULOMB * PARAMETER_TE_COULOMB * sizeof(double));
         #else
         double *cooling_values_local;
         cooling_values_local = (double *) malloc (PARAMETER_H * PARAMETER_B * PARAMETER_NE * PARAMETER_TE * sizeof(double));
@@ -958,33 +962,52 @@ int main(int argc, char** argv)
         if (rank == 0) {
             #if (COULOMBTEST)
             FILE *file_e_density;
-            file_e_density = fopen("ne_200.txt", "r");
+            file_e_density = fopen("./parameters/ne_200.txt", "r");
             FILE *file_temperature;
-            file_temperature = fopen("te_200.txt", "r");
+            file_temperature = fopen("./parameters/te_200.txt", "r");
 
-            for (i = 0; fscanf(file_e_density, "%lf", &ne_values[i]) == 1; i++) {
+            for (i = 0; fscanf(file_e_density, "%lf", &ne_values_C[i]) == 1; i++) {
                 // Do nothing inside the loop body, everything is done in the for loop header
             }
             // Read Te_values
-            for (i = 0; fscanf(file_temperature, "%lf", &Te_values[i]) == 1; i++) {
+            for (i = 0; fscanf(file_temperature, "%lf", &Te_values_C[i]) == 1; i++) {
                 // Do nothing inside the loop body, everything is done in the for loop header
             }
+            //printf("It got to here!\n");
             fclose(file_e_density);
             fclose(file_temperature);
 
             #else
+             // Print contents of the directory
+            char filename[100];
+            snprintf(filename, sizeof(filename), "./parameters/scale_height_%d.txt", PARAMETER_H - 1);
+
             FILE *file_height;
-            file_height = fopen("scale_height_33.txt", "r");
+            file_height = fopen(filename, "r");
+            if (file_height == NULL) {
+                printf("Error Reading Scale Height File\n");
+                MPI_Abort(MPI_COMM_WORLD, 1);
+            }
+
+            snprintf(filename, sizeof(filename), "./parameters/ne_%d.txt", PARAMETER_NE - 1);
             FILE *file_e_density;
-            file_e_density = fopen("ne_33.txt", "r");
+            file_e_density = fopen(filename, "r");
+            if (file_e_density == NULL) {
+                printf("Error Reading Electron Density File\n");
+                MPI_Abort(MPI_COMM_WORLD, 1);
+            }
+            snprintf(filename, sizeof(filename), "./parameters/te_%d.txt", PARAMETER_TE - 1);
             FILE *file_temperature;
-            file_temperature = fopen("te_33.txt", "r");
+            file_temperature = fopen(filename, "r");
+            if (file_temperature == NULL) {
+                printf("Error Reading Temperature File\n");
+                MPI_Abort(MPI_COMM_WORLD, 1);
+            }
+            snprintf(filename, sizeof(filename), "./parameters/mag_%d.txt", PARAMETER_B - 1);
             FILE *file_mag_field;
-            file_mag_field = fopen("mag_33.txt", "r");
-
-
-            if (file_height == NULL || file_e_density == NULL || file_temperature == NULL || file_mag_field == NULL) {
-                printf("Error Reading File\n");
+            file_mag_field = fopen(filename, "r");
+            if (file_mag_field == NULL) {
+                printf("Error Reading Magnetic Field File\n");
                 MPI_Abort(MPI_COMM_WORLD, 1);
             }
 
@@ -1013,8 +1036,8 @@ int main(int argc, char** argv)
 
         /*Broadcast parameter for the other nodes*/
         #if(COULOMBTEST)
-        MPI_Bcast(ne_values, PARAMETER_NE, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        MPI_Bcast(Te_values, PARAMETER_TE, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Bcast(ne_values, PARAMETER_NE_COULOMB, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Bcast(Te_values, PARAMETER_TE_COULOMB, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         #else
         MPI_Bcast(H_values, PARAMETER_H, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         MPI_Bcast(B_values, PARAMETER_B, MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -1037,7 +1060,7 @@ int main(int argc, char** argv)
         #elif(COULOMBTEST)
         if(rank ==0)fprintf(stderr,"Calculating the coulomb table in parallelized way. This can take a while...\n");
         #else
-        if(rank ==0)fprintf(stderr,"Calculating the cooling table in parallelized way. This can take a while...\n");
+        if(rank ==0)fprintf(stderr,"Calculating the cooling table in parallelized way for %d values or %d^4 values. This can take a while...\n", PARAMETER_B * PARAMETER_H * PARAMETER_NE * PARAMETER_TE, PARAMETER_NE);
         #endif
 
         /*Here we do the calculation depending on which table is setted by the switches. We distribute the outer loop between MPI processes and uses 
@@ -1046,13 +1069,13 @@ int main(int argc, char** argv)
         omp_set_num_threads(omp_get_max_threads()/size);
         #pragma omp parallel for collapse(3)
         for (i = local_start; i < local_end; i++) {
-            for (j = 0; j < PARAMETER_TE; j++) {
-                for (k = 0; k < PARAMETER_TE; k++) {
+            for (j = 0; j < PARAMETER_TE_COULOMB; j++) {
+                for (k = 0; k < PARAMETER_TE_COULOMB; k++) {
                         if (flag == 0) {
                             printf("Rank %d, Thread %d out of %d threads_per_rank\n", rank,  (omp_get_thread_num()) , omp_get_max_threads());
                             flag = 1; // Set flag to indicate message has been printed
                         }
-                        coulomb_values_local[INDEX_COULOMB] = coulomb_heating(pow(10,Te_values[k]), pow(10,Te_values[j]), pow(10,ne_values[i]));
+                        coulomb_values_local[INDEX_COULOMB] = coulomb_heating(pow(10,Te_values_C[k]), pow(10,Te_values_C[j]), pow(10,ne_values_C[i]));
                         //printf("ne_values = %lf, Ti_values = %lf, Te_values = %lf, coulomb = %lf\n", ne_values[i], Te_values[j], Te_values[k], coulomb_values_local[INDEX_COULOMB]);
                 }
             }
@@ -1098,7 +1121,7 @@ int main(int argc, char** argv)
 
         /*All the values for cooling are broadcasted back to rank 0.*/
         #if(COULOMBTEST)
-        MPI_Reduce(coulomb_values_local, coulomb_values_all, PARAMETER_NE * PARAMETER_TE* PARAMETER_TE, MPI_DOUBLE, MPI_SUM, 0 ,MPI_COMM_WORLD);
+        MPI_Reduce(coulomb_values_local, coulomb_values_all, PARAMETER_NE_COULOMB * PARAMETER_TE_COULOMB* PARAMETER_TE_COULOMB, MPI_DOUBLE, MPI_SUM, 0 ,MPI_COMM_WORLD);
         #else
         MPI_Reduce(cooling_values_local, cooling_values_all, PARAMETER_H * PARAMETER_B * PARAMETER_NE * PARAMETER_TE, MPI_DOUBLE, MPI_SUM, 0 ,MPI_COMM_WORLD);
         #endif
@@ -1121,25 +1144,39 @@ int main(int argc, char** argv)
             #elif(ABSORPTIONTEST)
             file_result = fopen("tau_table_05.bin", "w");
             #elif(COULOMBTEST)
-            file_result = fopen("coulomb_table_05.bin", "w");
+            char filename_result[100];
+                #if(!PRINT_BINARY)
+                    snprintf(filename_result, sizeof(filename_result), "./tables/coulomb_table_%d.txt", PARAMETER_NE_COULOMB -1);
+                    file_result = fopen(filename_result, "w");
+                #else
+                    snprintf(filename_result, sizeof(filename_result), "./tables/coulomb_table_%d.bin", PARAMETER_NE_COULOMB -1);
+                    file_result = fopen(filename_result, "w");
+                #endif
             #else
-            file_result = fopen("cooling_table_33_001.txt", "w");
+            char filename_result[100];
+                #if(!PRINT_BINARY)
+                    snprintf(filename_result, sizeof(filename_result), "./tables/cooling_table_%d.txt", PARAMETER_H -1);
+                    file_result = fopen(filename_result, "w");
+                #else
+                    snprintf(filename_result, sizeof(filename_result), "./tables/cooling_table_%d.bin", PARAMETER_H -1);
+                    file_result = fopen(filename_result, "w");
+                #endif
             #endif
             #if(COULOMBTEST)
                 #if(PRINT_BINARY)
-                for (i = 0; i < PARAMETER_NE; i++) {
-                    for (j = 0; j < PARAMETER_TE; j++) {
-                        for (k = 0; k < PARAMETER_TE; k++) {
+                for (i = 0; i < PARAMETER_NE_COULOMB; i++) {
+                    for (j = 0; j < PARAMETER_TE_COULOMB; j++) {
+                        for (k = 0; k < PARAMETER_TE_COULOMB; k++) {
                             fwrite(&coulomb_values_all[INDEX_COULOMB], sizeof(double), 1, file_result); // Write cooling_values_all array
                         }
                     }
                 }
                 #else
                 fprintf(file_result, " e_density, temperature_i, temperature_e , coulomb\n"); //code used to write in .txt file
-                for (i = 0; i < PARAMETER_NE; i++) {
-                    for (j = 0; j < PARAMETER_TE; j++) {
-                        for (k = 0; k < PARAMETER_TE; k++) {
-                            fprintf(file_result, "%.2f, %.2f, %.2f, %.8e\n", ne_values[i], Te_values[j], Te_values[k], coulomb_values_all[INDEX_COULOMB]); //code used to write in .txt file
+                for (i = 0; i < PARAMETER_NE_COULOMB; i++) {
+                    for (j = 0; j < PARAMETER_TE_COULOMB; j++) {
+                        for (k = 0; k < PARAMETER_TE_COULOMB; k++) {
+                            fprintf(file_result, "%.2f, %.2f, %.2f, %.8e\n", ne_values_C[i], Te_values_C[j], Te_values_C[k], coulomb_values_all[INDEX_COULOMB]); //code used to write in .txt file
                         }
                     }
                 }

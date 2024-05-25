@@ -32,7 +32,7 @@ void Load_coulomb_Tables(float *coulomb_table)
     fprintf(stderr, "Loading Table...\n");
 
     // Reading the coulomb table
-    infile = fopen("coulomb_table.bin", "rb");
+    infile = fopen("../tables/coulomb_table_200.bin", "rb");
 
     if (infile == NULL)
     {
@@ -110,10 +110,10 @@ __global__ void coulomb_function(cudaTextureObject_t my_tex, float a1, float a2,
     const int nx = SIZEOF_TE; //Number of te used to generate table
     const int ny = SIZEOF_TI; //Number of ne used to generate table
     const int nz = SIZEOF_NE; //Number of Bmag used to generate table
-    if (a2 - a1 < 1e-7){
-        a2 = 2;
-        a1 = 2;
-    }
+    // if (a2 - a1 < 1e-7){
+    //     a2 = 2;
+    //     a1 = 2;
+    // }
     v1 = ((((a1 - 2.) > 0? a1 - 2. : 0) * (nz - 1.)/23.) + 0.5);
     v2 = ((((a2 - 2.) > 0? a2 - 2. : 0) * (ny - 1.)/13.) + 0.5);
     v3 = ((((a3 - 2.) > 0? a3 - 2. : 0) * (nx - 1.)/13.) + 0.5);

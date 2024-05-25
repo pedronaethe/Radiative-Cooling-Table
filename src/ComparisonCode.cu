@@ -995,7 +995,7 @@ int main(){
         cudaDeviceSynchronize();
 
     #endif
-    //cooling_function_analytical<<<1, 1>>>(d_H_random, d_B_random, d_Ne_random, d_Te_random, d_results);
+    cooling_function_analytical<<<1, 1>>>(d_H_random, d_B_random, d_Ne_random, d_Te_random, d_results);
     cudaDeviceSynchronize();
     end_time = clock();
     duration = (double)(end_time - start_time) / CLOCKS_PER_SEC;

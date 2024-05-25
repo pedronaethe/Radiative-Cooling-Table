@@ -36,3 +36,7 @@ txt_to_bin
 smalltablegenerator.cu
 max_min.c
 cuda_new
+build/cooling_texture
+build/cooling
+build/comparisoncode
+build/cooling_mpi

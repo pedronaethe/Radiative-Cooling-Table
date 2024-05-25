@@ -4,10 +4,10 @@
 #include <time.h>
 
 
-#define SIZEOF_H 33 /*Size of H's in your cooling table*/
-#define SIZEOF_B 33 /*Size of B's in your cooling table*/
-#define SIZEOF_TE 33 /*Size of Te's in your cooling table*/
-#define SIZEOF_NE 33/*Size of Ne's in your cooling table*/
+#define SIZEOF_H 40 + 1 /*Size of H's in your cooling table*/
+#define SIZEOF_B 40 + 1 /*Size of B's in your cooling table*/
+#define SIZEOF_TE 40 + 1 /*Size of Te's in your cooling table*/
+#define SIZEOF_NE 40 + 1/*Size of Ne's in your cooling table*/
 #define N_RESOLUTION 12600 /*This is for resolution_test and is the number of cells in your simulation*/
 #define DT 7.336005915070878e-07 /*This is an approximation of the timestep for coulomb test*/
 
@@ -16,10 +16,10 @@
 #define TABLE_SIZE (SIZEOF_H * SIZEOF_B * SIZEOF_TE * SIZEOF_NE) /*Total size of the table*/
 #define SIZEOF_TEST 100  /*Quad root of number of calculations for GLOBAL_MEMORY_TEST*/
 
-#define SINGLE_TEST (0) /*Single value test*/
+#define SINGLE_TEST (1) /*Single value test*/
 #define RESOLUTION_TEST (0) /*Compare analytical values with values from the table*/
 #define COMPARISON_MARCEL (0) /*Compare plot A.1 of Marcel et al. 2018: A unified accretion-ejection paradigm for black hole X-ray binaries*/
-#define GLOBAL_MEMORY_TEST (1) /*Test texture memory vs global memory efficiency*/
+#define GLOBAL_MEMORY_TEST (0) /*Test texture memory vs global memory efficiency*/
 #define INDEX(i, j, k, l) (l + SIZEOF_TE * (k + SIZEOF_NE * (j + SIZEOF_B * i))) /*4D indexing*/
 
 /*Declaration of both texture objects*/
@@ -44,7 +44,7 @@ void Load_Cooling_Tables(float *cooling_table)
     double value;
 
     // Reading the cooling table
-    infile = fopen("cooling_table_33_05.bin", "rb");
+    infile = fopen("../tables/cooling_table_40.bin", "rb");
 
     if (infile == NULL)
     {
@@ -116,16 +116,6 @@ void CreateTexture(void)
     return;
 }
 
-/*This function creates an array of linear equally spaced values*/
-__device__ void linspace(float start, float end, int numPoints, float *result)
-{
-    float stepSize = (end - start) / (float)(numPoints - 1);
-    for (int i = 0; i < numPoints; i++)
-    {
-        result[i] = start + i * stepSize;
-    }
-}
-
 __device__ double no_interpolation(cudaTextureObject_t my_tex, double H_value, double B_value, double ne_value, double te_value){
     double coord_H, coord_B, Coord;
     float te_index, ne_index;
@@ -137,7 +127,7 @@ __device__ double no_interpolation(cudaTextureObject_t my_tex, double H_value, d
     const int nz = SIZEOF_B;  // Number of Bmag used to generate table
 
     // Calculate both dimensions that are not flattened
-    coord_H = ((((H_value - 3.) > 0 ? H_value - 3. : 0) * (nw - 1.) / 5.) + 0.5);
+    coord_H = ((((H_value - 3.) > 0 ? H_value - 3. : 0) * (nw - 1.) / 9.) + 0.5);
     coord_B = (((B_value - 0.) > 0 ? B_value : 0) * (nz - 1.) / 10. + 0.5);
 
     // Select maximum values separetly
@@ -166,9 +156,13 @@ __device__ double interpolate_ne_te(cudaTextureObject_t my_tex, double H_value, 
     //double t_ubreak = 9.540000; //para 101
     //double t_lbreak = 9.410000; //para 101
 
-    double t_break = 9.472016; //para 33
-    double t_ubreak = 9.71875; //para 33
-    double t_lbreak = 9.3125; //para 33
+    // double t_break = 9.472016; //para 33
+    // double t_ubreak = 9.71875; //para 33
+    // double t_lbreak = 9.3125; //para 33
+    
+    double t_break = 9.472016; //para 41
+    double t_ubreak = 9.4750; //para 41
+    double t_lbreak = 9.1500; //para 41
     
     float alpha, beta, Coord_ij, Coord_i1j, Coord_ij1, Coord_i1j1, Coord_i, Coord_i1;
     float Coord_ihalfj, Coord_ihalfj1, Coord_im1j1, Coord_im1j, Coord_iM1j1, Coord_iM1j, Coord_im2j1, Coord_im2j, Coord_iM2j1, Coord_iM2j, frac_break, alpha_lower, alpha_upper;
@@ -179,7 +173,7 @@ __device__ double interpolate_ne_te(cudaTextureObject_t my_tex, double H_value, 
     const int nz = SIZEOF_B;  // Number of Bmag used to generate table
 
     // Calculate both dimensions that are not flattened
-    coord_H = ((((H_value - 3.) > 0 ? H_value - 3. : 0) * (nw - 1.) / 5.) + 0.5);
+    coord_H = ((((H_value - 3.) > 0 ? H_value - 3. : 0) * (nw - 1.) / 9.) + 0.5);
     coord_B = (((B_value - 0.) > 0 ? B_value : 0) * (nz - 1.) / 10. + 0.5);
 
     // Select maximum values separetly
@@ -404,12 +398,18 @@ __global__ void cooling_function_comparison_global(cudaTextureObject_t my_tex, d
 }
 int main()
 {
+    cudaError_t cudaStatus;
 #if (SINGLE_TEST)
     float read0, read1, read2, read3;
     float loop = 100;
 
     char str[1];
     CreateTexture();
+    cudaStatus = cudaGetLastError();
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "Error creating texture %s\n", cudaGetErrorString(cudaStatus));
+        exit(1);
+    }
     while (loop > 1)
     {
         fprintf(stderr,"scale_height value:\n");
