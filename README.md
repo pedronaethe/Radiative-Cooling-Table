@@ -90,5 +90,5 @@ where V refers to the coordinate you modified. My cooling tables are 4D, so I'm 
 
 **Note: If you modified the number of values for each parameter, you'll need to adjust $N_w$, $N_x$, $N_y$ and $N_z$ for each function inside this file and also in GPU_Program1.cu file in case you want to implement this in H-AMR.** 
 
-In case you want to add this cooling table to [H-AMR](https://arxiv.org/abs/1912.10192), I advise you to check my [cooling branch](https://github.com/black-hole-group/hamr/tree/Cooling_pedro)
+In case you want to add this cooling table to [H-AMR](https://arxiv.org/abs/1912.10192)
 
