@@ -31,7 +31,7 @@
 #define BREMSTRAHLUNGTEST (0) //Generates a table for bremmstrahlung equation
 #define ABSORPTIONTEST (0) //Generates a table with absorption values
 #define COULOMBTEST (0) //Generates a table with coulomb values
-#define PRINT_BINARY (0) // Whether to print in binary or txt file
+#define PRINT_BINARY (1) // Whether to print in binary or txt file
 
 
 /*Switches to change between table generation and test, for table generation put everything 0*/

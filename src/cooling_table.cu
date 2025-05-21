@@ -4,23 +4,25 @@
 #include <time.h>
 
 
-#define SIZEOF_H 40 + 1 /*Size of H's in your cooling table*/
-#define SIZEOF_B 40 + 1 /*Size of B's in your cooling table*/
-#define SIZEOF_TE 40 + 1 /*Size of Te's in your cooling table*/
-#define SIZEOF_NE 40 + 1/*Size of Ne's in your cooling table*/
-#define N_RESOLUTION 12600 /*This is for resolution_test and is the number of cells in your simulation*/
+#define NBLOCKS 1792
+#define NTHREADS 256
+#define SIZEOF_H (40 + 1) /*Size of H's in your cooling table*/
+#define SIZEOF_B (40 + 1) /*Size of B's in your cooling table*/
+#define SIZEOF_TE (40 + 1) /*Size of Te's in your cooling table*/
+#define SIZEOF_NE (40 + 1)/*Size of Ne's in your cooling table*/
+#define N_RESOLUTION 65536 /*This is for resolution_test and is the number of cells in your simulation*/
 #define DT 7.336005915070878e-07 /*This is an approximation of the timestep for coulomb test*/
 
 #define THOMSON_CGS (6.652e-25) /*Thomson's cross section in CGS*/
 #define BOLTZ_CGS (1.3806504e-16) /*Boltzmann constant in CGS*/
 #define TABLE_SIZE (SIZEOF_H * SIZEOF_B * SIZEOF_TE * SIZEOF_NE) /*Total size of the table*/
-#define SIZEOF_TEST 100  /*Quad root of number of calculations for GLOBAL_MEMORY_TEST*/
+#define SIZEOF_TEST 50  /*Quad root of number of calculations for GLOBAL_MEMORY_TEST*/
 
-#define SINGLE_TEST (1) /*Single value test*/
+#define SINGLE_TEST (0) /*Single value test*/
 #define RESOLUTION_TEST (0) /*Compare analytical values with values from the table*/
 #define COMPARISON_MARCEL (0) /*Compare plot A.1 of Marcel et al. 2018: A unified accretion-ejection paradigm for black hole X-ray binaries*/
-#define GLOBAL_MEMORY_TEST (0) /*Test texture memory vs global memory efficiency*/
-#define INDEX(i, j, k, l) (l + SIZEOF_TE * (k + SIZEOF_NE * (j + SIZEOF_B * i))) /*4D indexing*/
+#define GLOBAL_MEMORY_TEST (1) /*Test texture memory vs global memory efficiency*/
+#define INDEX(h, b, ne, te) (((((h) * SIZEOF_B + (b)) * SIZEOF_NE + (ne)) * SIZEOF_TE) + (te))
 
 /*Declaration of both texture objects*/
 cudaTextureObject_t coolTexObj;
@@ -344,6 +346,7 @@ __device__ int binarySearchClosest(double *tablevalue, int size, double target)
 
 __global__ void global_memory_reading(double *parameterH, double *parameterB, double *parameterNe, double *parameterTe, double *H_list, double *B_list, double *ne_list, double *Te_list, double *cooling, double *value)
 {
+
     for (int i = 0; i < SIZEOF_TEST; i++)
     {
         int indexH = binarySearchClosest(H_list, SIZEOF_H, parameterH[i]);
@@ -357,13 +360,13 @@ __global__ void global_memory_reading(double *parameterH, double *parameterB, do
                 {
                     int indexTe = binarySearchClosest(Te_list, SIZEOF_TE, parameterTe[l]);
                     value[INDEX(indexH, indexB, indexNe, indexTe)] = cooling[INDEX(indexH, indexB, indexNe, indexTe)];
-                    //printf("H = %le, B = %le, ne = %le, Te = %le, cooling = %le\n", parameterH[i], parameterB[j], parameterNe[k], parameterTe[l], value[INDEX(indexH, indexB, indexNe, indexTe)]);
 
                 }
             }
         }
     }
 }
+
 
 void logspace(double start, double end, int num, double *result)
 {
@@ -377,6 +380,56 @@ void logspace(double start, double end, int num, double *result)
     }
 }
 
+__global__ void cooling_function_comparison_global_v2(cudaTextureObject_t my_tex, double *H, double *B, double *ne, double *te, double *value)
+{
+    int total_elements = SIZEOF_TEST * SIZEOF_TEST * SIZEOF_TEST * SIZEOF_TEST;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    for (int i = idx; i < total_elements; i += NBLOCKS * NTHREADS)
+    {
+        int l = i % SIZEOF_TEST;
+        int k = (i / SIZEOF_TEST) % SIZEOF_TEST;
+        int j = (i / (SIZEOF_TEST * SIZEOF_TEST)) % SIZEOF_TEST;
+        int i_idx = i / (SIZEOF_TEST * SIZEOF_TEST * SIZEOF_TEST);
+
+        int coord_H = floor((H[i_idx] - 3.) * (SIZEOF_H - 1) / 9. + 0.5);
+        int coord_B = floor((B[j]) * (SIZEOF_B - 1) / 10. + 0.5);
+        int coord_ne = floor((ne[k] - 2.) * (SIZEOF_NE - 1) / 23. + 0.5);
+        int coord_te = floor((te[l] - 2.) * (SIZEOF_TE - 1) / 13. + 0.5);
+        int mixed_coord = coord_te + coord_ne * SIZEOF_TE + 0.5;
+        value[i] = tex3D<float>(my_tex, mixed_coord, coord_B, coord_H);
+        if(i == 12930)
+        printf("Value_tex[%d] = %lf\n", i, value[i]);
+    }
+    return;
+}
+
+__global__ void global_memory_reading_v2(double *parameterH, double *parameterB, double *parameterNe, double *parameterTe, double *cooling, double *value) {
+    int total_elements = SIZEOF_TEST * SIZEOF_TEST * SIZEOF_TEST * SIZEOF_TEST;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    for (int i = idx; i < 10; i += NBLOCKS * NTHREADS) {
+        int l = i % SIZEOF_TEST;
+        int k = (i / SIZEOF_TEST) % SIZEOF_TEST;
+        int j = (i / (SIZEOF_TEST * SIZEOF_TEST)) % SIZEOF_TEST;
+        int i_idx = i / (SIZEOF_TEST * SIZEOF_TEST * SIZEOF_TEST);
+
+        int indexH = floor((parameterH[i_idx] - 3.) * (SIZEOF_H - 1) / 9. + 0.5);
+        int indexB = floor((parameterB[j]) * (SIZEOF_B - 1) / 10. + 0.5);
+        int indexNe = floor((parameterNe[k] - 2.) * (SIZEOF_NE - 1) / 23. + 0.5);
+        int indexTe = floor((parameterTe[l] - 2.) * (SIZEOF_TE - 1) / 13. + 0.5);
+
+        indexH  = max(0, min(SIZEOF_H - 1, indexH));
+        indexB  = max(0, min(SIZEOF_B - 1, indexB));
+        indexNe = max(0, min(SIZEOF_NE - 1, indexNe));
+        indexTe = max(0, min(SIZEOF_TE - 1, indexTe));
+        value[i] = cooling[INDEX(indexH, indexB, indexNe, indexTe)];
+        if(i == 12930)
+        printf("Value_global[%d] = %lf\n", i, value[i]);
+    }
+    return;
+}
+
 __global__ void cooling_function_comparison_global(cudaTextureObject_t my_tex, double *H, double *B, double *ne, double *te, double *value)
 {
     for (int i = 0; i < SIZEOF_TEST; i++)
@@ -387,9 +440,7 @@ __global__ void cooling_function_comparison_global(cudaTextureObject_t my_tex, d
             {
                 for (int l = 0; l < SIZEOF_TEST; l++)
                 {
-                    //value[INDEX(i, j, k, l)] = interpolate_ne_te(my_tex, H[i], B[j], ne[k], te[l]);
                     value[INDEX(i, j, k, l)] = no_interpolation(my_tex, H[i], B[j], ne[k], te[l]);
-                    //printf("H = %le, B = %le, ne = %le, Te = %le, cooling = %le\n", H[i], B[j], ne[k], te[l], value[INDEX(i, j, k, l)]);
                 }
             }
         }
@@ -453,17 +504,17 @@ int main()
 
 
     fprintf(stderr, "Initializing resolution test reading\n");
-    char filename[] = "New_005.txt";
+    char filename[] = "../txts/hamr_test.txt";
     FILE *file_result;
     file_result = fopen(filename, "w");
     FILE *file_height_test;
-    file_height_test = fopen("scaleheight_sim.txt", "r");
+    file_height_test = fopen("../txts/logH.txt", "r");
     FILE *file_e_density_test;
-    file_e_density_test = fopen("electronic_density_sim.txt", "r");
+    file_e_density_test = fopen("../txts/logne.txt", "r");
     FILE *file_temperature_test;
-    file_temperature_test = fopen("electronic_temperature_sim.txt", "r");
+    file_temperature_test = fopen("../txts/logTe.txt", "r");
     FILE *file_mag_field_test;
-    file_mag_field_test = fopen("magnetic_field_sim.txt", "r");
+    file_mag_field_test = fopen("../txts/logB.txt", "r");
     // FILE *file_ucov_test;
     // file_ucov_test = fopen("ucov_sim.txt", "r");
     // FILE *file_ug_test;
@@ -595,15 +646,15 @@ int main()
     cudaMalloc(&d_results, SIZEOF_TEST * sizeof(double));
     fprintf(stderr,"Initializing GLOBAL MEMORY testing\n");
     FILE *file_height_test;
-    file_height_test = fopen("scale_height_33.txt", "r");
+    file_height_test = fopen("../parameters/scale_height_40.txt", "r");
     FILE *file_e_density_test;
-    file_e_density_test = fopen("ne_33.txt", "r");
+    file_e_density_test = fopen("../parameters/ne_40.txt", "r");
     FILE *file_temperature_test;
-    file_temperature_test = fopen("te_33.txt", "r");
+    file_temperature_test = fopen("../parameters/te_40.txt", "r");
     FILE *file_mag_field_test;
-    file_mag_field_test = fopen("mag_33.txt", "r");
+    file_mag_field_test = fopen("../parameters/mag_40.txt", "r");
     FILE *file_cooling_test;
-    file_cooling_test = fopen("cooling_table_33_05.bin", "rb");
+    file_cooling_test = fopen("../tables/cooling_table_40.bin", "rb");
     for (i = 0; fscanf(file_height_test, "%lf", H_test + i) == 1; i++)
     {
         // Do nothing inside the loop body, everything is done in the for loop header
@@ -626,6 +677,12 @@ int main()
         fread(&cool_test[i], sizeof(double), 1, file_cooling_test);
         // fprintf(stderr,"cool_test[%d] = %lf\n", i, cool_test[i]);
     }
+    fclose(file_height_test);
+    fclose(file_e_density_test);
+    fclose(file_temperature_test);
+    fclose(file_mag_field_test);
+    fclose(file_cooling_test);
+    
     logspace(1e5, 1e8, SIZEOF_TEST, H_random);
     logspace(1e0, 1e10, SIZEOF_TEST, B_random);
     logspace(1e2, 1e15, SIZEOF_TEST, Te_random);
@@ -645,18 +702,42 @@ int main()
     fprintf(stderr,"Starting table lookup...\n");
 
     start_time = clock();
-    //cooling_function_comparison_global<<<1, 1>>>(coolTexObj, d_H_random, d_B_random, d_Ne_random, d_Te_random, d_results);
+    cooling_function_comparison_global_v2<<<NBLOCKS, NTHREADS>>>(coolTexObj, d_H_random, d_B_random, d_Ne_random, d_Te_random, d_results);
     cudaDeviceSynchronize();
     end_time = clock();
     duration = (double)(end_time - start_time) / CLOCKS_PER_SEC;
     fprintf(stderr,"Number of values analyzed = %d, duration texture: %.6f seconds\n", SIZEOF_TEST, duration);
 
     start_time = clock();
-    global_memory_reading<<<1, 1>>>(d_H_random, d_B_random, d_Ne_random, d_Te_random, d_H_test, d_B_test, d_ne_test, d_Te_test, d_cool_test, d_results);
+    //global_memory_reading<<<1, 1>>>(d_H_random, d_B_random, d_Ne_random, d_Te_random, d_H_test, d_B_test, d_ne_test, d_Te_test, d_cool_test, d_results);
+    global_memory_reading_v2<<<NBLOCKS, NTHREADS>>>(d_H_random, d_B_random, d_Ne_random, d_Te_random, d_cool_test, d_results);
+
     cudaDeviceSynchronize();
     end_time = clock();
     duration = (double)(end_time - start_time) / CLOCKS_PER_SEC;
     fprintf(stderr,"Number of values analyzed = %d, duration global: %.6f seconds\n", SIZEOF_TEST, duration);
+    //free all the arrays and texture objects used
+    free(H_test);
+    free(B_test);
+    free(ne_test);
+    free(Te_test);
+    free(cool_test);
+    free(H_random);
+    free(B_random);
+    free(ne_random);
+    free(Te_random);
+    cudaDestroyTextureObject(coolTexObj);
+    cudaFree(d_H_test);
+    cudaFree(d_B_test);
+    cudaFree(d_ne_test);
+    cudaFree(d_Te_test);
+    cudaFree(d_cool_test);
+    cudaFree(d_H_random);
+    cudaFree(d_B_random);
+    cudaFree(d_Ne_random);
+    cudaFree(d_Te_random);
+    cudaFree(d_results);
+    
 
 #endif
     return 0;
